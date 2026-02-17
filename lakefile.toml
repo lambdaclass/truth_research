@@ -1,0 +1,11 @@
+name = "lambdasat-lean"
+version = "0.1.0"
+keywords = ["equality-saturation", "e-graph", "verification"]
+defaultTargets = ["LambdaSat"]
+
+[leanOptions]
+pp.unicode.fun = true
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "LambdaSat"
