@@ -1,0 +1,129 @@
+/-
+  LambdaSat — Translation Validation
+  Fase 4 Subfase 3: Generic translation validation for equality saturation
+
+  Proves that optimized expressions are semantically equivalent to originals.
+  The key idea: equality saturation preserves ConsistentValuation, and
+  extraction from equivalent classes yields semantically equivalent expressions.
+
+  Key theorems:
+  - `congruence_merge`: merging equivalent classes preserves valuation
+  - `optimization_soundness`: end-to-end pipeline theorem
+-/
+import LambdaSat.ExtractSpec
+import LambdaSat.ILPSpec
+
+namespace LambdaSat
+
+open UnionFind
+
+variable {Op : Type} {Val : Type} {Expr : Type}
+  [NodeOps Op] [BEq Op] [Hashable Op]
+  [LawfulBEq Op] [LawfulHashable Op]
+  [NodeSemantics Op Val]
+  [Extractable Op Expr] [EvalExpr Expr Val]
+
+-- ══════════════════════════════════════════════════════════════════
+-- Proof Witness
+-- ══════════════════════════════════════════════════════════════════
+
+/-- A proof witness captures the state needed to validate an optimization.
+    It records the e-graph state, extraction results, and invariant witnesses. -/
+structure ProofWitness (Op Expr : Type) [BEq Op] [Hashable Op] where
+  /-- The e-graph after saturation + cost computation -/
+  graph : EGraph Op
+  /-- Root class ID for extraction -/
+  rootId : EClassId
+  /-- The extracted expression (before or after optimization) -/
+  extracted : Expr
+  /-- Extraction fuel used -/
+  fuel : Nat
+
+-- ══════════════════════════════════════════════════════════════════
+-- Congruence Theorems
+-- ══════════════════════════════════════════════════════════════════
+
+/-- Merging preserves valuation: if two classes have the same value,
+    their merge preserves ConsistentValuation.
+    (Direct re-export of merge_consistent from SemanticSpec.) -/
+theorem congruence_merge (g : EGraph Op) (id1 id2 : EClassId)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hv : ConsistentValuation g env v) (hwf : WellFormed g.unionFind)
+    (h1 : id1 < g.unionFind.parent.size) (h2 : id2 < g.unionFind.parent.size)
+    (heq : v (root g.unionFind id1) = v (root g.unionFind id2)) :
+    ConsistentValuation (g.merge id1 id2) env v :=
+  merge_consistent g id1 id2 env v hv hwf h1 h2 heq
+
+/-- Extraction of equivalent classes yields the same value.
+    If two class IDs have the same UF root, their extracted expressions
+    (if extraction succeeds for both) evaluate to the same value. -/
+theorem congruence_extract (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hwf : WellFormed g.unionFind)
+    (hbni : BestNodeInv g.classes)
+    (hsound : ExtractableSound Op Expr Val)
+    (id1 id2 : EClassId) (expr1 expr2 : Expr) (fuel : Nat)
+    (hroot : root g.unionFind id1 = root g.unionFind id2)
+    (hext1 : extractF g id1 fuel = some expr1)
+    (hext2 : extractF g id2 fuel = some expr2) :
+    EvalExpr.evalExpr expr1 env = EvalExpr.evalExpr expr2 env := by
+  have h1 := extractF_correct g env v hcv hwf hbni hsound fuel id1 expr1 hext1
+  have h2 := extractF_correct g env v hcv hwf hbni hsound fuel id2 expr2 hext2
+  rw [h1, h2, hroot]
+
+-- ══════════════════════════════════════════════════════════════════
+-- Optimization Soundness
+-- ══════════════════════════════════════════════════════════════════
+
+/-- End-to-end optimization soundness (greedy extraction).
+    If:
+    - We start with a consistent e-graph
+    - Saturation preserves consistency (via sound rewrite rules)
+    - computeCostsF preserves the invariants
+    - Extraction succeeds
+
+    Then the extracted expression evaluates to the correct value. -/
+theorem optimization_soundness_greedy (g : EGraph Op) (costFn : ENode Op → Nat)
+    (costFuel : Nat) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hwf : WellFormed g.unionFind)
+    (hbni : BestNodeInv g.classes)
+    (hsound : ExtractableSound Op Expr Val)
+    (rootId : EClassId) (extractFuel : Nat) (expr : Expr)
+    (hext : extractF (computeCostsF g costFn costFuel) rootId extractFuel = some expr) :
+    EvalExpr.evalExpr expr env = v (root g.unionFind rootId) :=
+  computeCostsF_extractF_correct g costFn costFuel env v hcv hwf hbni hsound
+    extractFuel rootId expr hext
+
+/-- End-to-end optimization soundness (ILP extraction).
+    Same as greedy but uses ILP solution to guide extraction. -/
+theorem optimization_soundness_ilp (g : EGraph Op) (rootId : EClassId)
+    (sol : ILP.ILPSolution) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hwf : WellFormed g.unionFind)
+    (hvalid : ILP.ValidSolution g rootId sol)
+    (hsound : ExtractableSound Op Expr Val)
+    (fuel : Nat) (expr : Expr)
+    (hext : ILP.extractILP g sol rootId fuel = some expr) :
+    EvalExpr.evalExpr expr env = v (root g.unionFind rootId) :=
+  ILP.extractILP_correct g rootId sol env v hcv hwf hvalid hsound fuel rootId expr hext
+
+/-- Semantic equivalence: if we extract from the same root class
+    using both greedy and ILP methods, the results are equivalent. -/
+theorem greedy_ilp_equivalent (g : EGraph Op) (rootId : EClassId)
+    (sol : ILP.ILPSolution) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hwf : WellFormed g.unionFind)
+    (hbni : BestNodeInv g.classes)
+    (hvalid : ILP.ValidSolution g rootId sol)
+    (hsound : ExtractableSound Op Expr Val)
+    (fuelG fuelI : Nat) (exprG exprI : Expr)
+    (hextG : extractF g rootId fuelG = some exprG)
+    (hextI : ILP.extractILP g sol rootId fuelI = some exprI) :
+    EvalExpr.evalExpr exprG env = EvalExpr.evalExpr exprI env := by
+  have hG := extractF_correct g env v hcv hwf hbni hsound fuelG rootId exprG hextG
+  have hI := ILP.extractILP_correct g rootId sol env v hcv hwf hvalid hsound
+    fuelI rootId exprI hextI
+  rw [hG, hI]
+
+end LambdaSat

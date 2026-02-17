@@ -9,3 +9,7 @@ relaxedAutoImplicit = false
 
 [[lean_lib]]
 name = "LambdaSat"
+
+[[lean_lib]]
+name = "Tests"
+globs = ["Tests"]
