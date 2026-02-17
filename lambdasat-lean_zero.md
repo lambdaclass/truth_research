@@ -4,24 +4,7 @@
 
 LambdaSat-Lean extracts the verified e-graph engine from VR1CS-Lean into a standalone, domain-agnostic library parameterized by typeclasses. The goal: a reusable verified equality saturation engine for any first-order term rewriting domain.
 
-## Risk Analysis
-
-### Option A: Prose-only (argue generality in the paper)
-**Risk: ZERO in code.** Nothing is touched. The risk is *paper credibility* — a reviewer may request the generic artifact and reject if only the hardcoded `CircuitNodeOp` version exists.
-
-### Option B: Refactor VR1CS-Lean in-place
-**Risk: HIGH.** `CircuitNodeOp` is hardcoded in `Core.lean` and propagates transitively to 12 of 14 engine files. Changing `EGraph` to `EGraph Op` with typeclasses requires:
-
-- Modifying **Core.lean** (foundational structure, 1,368 LOC of spec depend on it)
-- Re-proving **CoreSpec.lean** (64 theorems now about generic `EGraph Op`)
-- Re-proving **SemanticSpec.lean** (36 theorems, most complex: 2,061 LOC)
-- Adapting **EMatch.lean** (pattern matching with `CircuitPattern` to generic patterns)
-- Adapting **ILPCheck.lean** + **ILPSpec.lean** (3 key theorems)
-- **All** files importing Core.lean change their signatures
-
-This means touching ~5,100 LOC of spec with ~156 verified theorems. A single type change propagation error breaks the entire proof chain. And this is on a **v1.3.0 released project with tag**. Unacceptable.
-
-### Option C: Standalone from scratch (LambdaSat-Lean)
+Standalone from scratch (LambdaSat-Lean)
 **Risk to VR1CS-Lean: ZERO.** Not a single byte touched.
 **Risk to AMO-Lean: ZERO.** Not a single byte touched.
 

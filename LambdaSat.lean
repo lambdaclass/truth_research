@@ -8,3 +8,4 @@ import LambdaSat.Core
 import LambdaSat.EMatch
 import LambdaSat.Saturate
 import LambdaSat.CoreSpec
+import LambdaSat.SemanticSpec
