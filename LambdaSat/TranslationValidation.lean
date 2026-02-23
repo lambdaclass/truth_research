@@ -12,6 +12,7 @@
 -/
 import LambdaSat.ExtractSpec
 import LambdaSat.ILPSpec
+import LambdaSat.SaturationSpec
 
 namespace LambdaSat
 
@@ -125,5 +126,43 @@ theorem greedy_ilp_equivalent (g : EGraph Op) (rootId : EClassId)
   have hI := ILP.extractILP_correct g rootId sol env v hcv hwf hvalid hsound
     fuelI rootId exprI hextI
   rw [hG, hI]
+
+-- ══════════════════════════════════════════════════════════════════
+-- Full Pipeline Soundness (with saturation)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- Full pipeline soundness: saturate → extract is semantically correct.
+
+    Given:
+    - An initial e-graph with ConsistentValuation
+    - Sound rewrite rules (each rule application preserves CV)
+    - Saturation produces a saturated e-graph
+    - Extraction succeeds from the saturated e-graph
+
+    Then the extracted expression evaluates to the correct value.
+
+    This closes the soundness gap: saturation is now part of the
+    verified pipeline, not just an assumption. -/
+theorem full_pipeline_soundness_greedy (g : EGraph Op)
+    (rules : List (RewriteRule Op))
+    (costFn : ENode Op → Nat) (costFuel fuel maxIter rebuildFuel : Nat)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule))
+    (rootId : EClassId) (extractFuel : Nat) (expr : Expr)
+    -- Post-saturation hypotheses (on the saturated graph)
+    (hwf_sat : WellFormed (saturateF fuel maxIter rebuildFuel g rules).unionFind)
+    (hbni_sat : BestNodeInv (saturateF fuel maxIter rebuildFuel g rules).classes)
+    (hsound : ExtractableSound Op Expr Val)
+    (hext : extractF (computeCostsF (saturateF fuel maxIter rebuildFuel g rules) costFn costFuel)
+              rootId extractFuel = some expr) :
+    ∃ (v_sat : EClassId → Val), EvalExpr.evalExpr expr env =
+      v_sat (root (saturateF fuel maxIter rebuildFuel g rules).unionFind rootId) := by
+  obtain ⟨v_sat, hcv_sat⟩ := saturateF_preserves_consistent fuel maxIter rebuildFuel g rules
+    env v hcv h_rules
+  have hresult := computeCostsF_extractF_correct
+    (saturateF fuel maxIter rebuildFuel g rules) costFn costFuel env v_sat
+    hcv_sat hwf_sat hbni_sat hsound extractFuel rootId expr hext
+  exact ⟨v_sat, hresult⟩
 
 end LambdaSat

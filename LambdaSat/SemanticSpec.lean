@@ -1066,14 +1066,9 @@ theorem merge_preserves_hashcons_classes_aligned (g : EGraph Op) (id1 id2 : ECla
 -- Section 12: Conditional saturation step (stretch)
 -- ══════════════════════════════════════════════════════════════════
 
-/-- If rule application preserves ConsistentValuation, then one full saturation
-    step preserves ConsistentValuation. (Stretch goal placeholder.) -/
-theorem saturateStep_consistent_conditional (g : EGraph Op)
-    (env : Nat → Val) (v_post : EClassId → Val)
-    (h_applied_cv : ConsistentValuation g env v_post)
-    (h_applied_pmi : PostMergeInvariant g)
-    (h_applied_hca : HashconsClassesAligned g)
-    (h_applied_cb : ChildrenBounded g) :
-    True := trivial
+-- Saturation soundness is now provided by SaturationSpec.lean:
+--   - `saturateF_preserves_consistent`: main saturation loop preserves ∃v', CV
+--   - `sound_rule_preserves_consistency`: individual rule application preserves CV
+-- See LambdaSat/SoundRule.lean and LambdaSat/SaturationSpec.lean.
 
 end LambdaSat

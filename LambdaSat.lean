@@ -38,4 +38,6 @@ import LambdaSat.ILPSpec
 import LambdaSat.ParallelMatch
 import LambdaSat.ParallelSaturate
 import LambdaSat.Optimize
+import LambdaSat.SoundRule
+import LambdaSat.SaturationSpec
 import LambdaSat.TranslationValidation
