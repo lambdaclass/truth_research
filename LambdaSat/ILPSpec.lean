@@ -33,6 +33,7 @@ variable {Op : Type} {Val : Type} {Expr : Type}
 def ValidSolution (g : EGraph Op) (rootId : EClassId) (sol : ILPSolution) : Prop :=
   checkSolution g rootId sol = true
 
+set_option linter.unusedSectionVars false in
 /-- If checkSolution passes, the root class is active. -/
 theorem validSol_root_active (g : EGraph Op) (rootId : EClassId)
     (sol : ILPSolution) (hv : ValidSolution g rootId sol) :
@@ -64,7 +65,7 @@ theorem extractILP_correct (g : EGraph Op) (rootId : EClassId)
     (sol : ILPSolution) (env : Nat → Val) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
     (hwf : WellFormed g.unionFind)
-    (hvalid : ValidSolution g rootId sol)
+    (_hvalid : ValidSolution g rootId sol)
     (hsound : ExtractableSound Op Expr Val) :
     ∀ (fuel : Nat) (classId : EClassId) (expr : Expr),
       extractILP g sol classId fuel = some expr →

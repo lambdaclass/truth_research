@@ -3,6 +3,8 @@
   Verified implementation with 44 theorems, zero sorry.
   Direct copy from VR1CS-Lean v1.3.0 (namespace change only).
 -/
+set_option linter.unusedSimpArgs false
+set_option linter.unusedVariables false
 
 namespace LambdaSat
 
@@ -210,8 +212,8 @@ theorem rootD_push {parent : Array EClassId} {v : EClassId} {id : EClassId} {fue
     unfold rootD
     rw [dif_pos hid', dif_pos hid, hget]
     cases hc : parent[id]'hid == id
-    · simp [hc]; exact ih (hbnd id hid)
-    · simp [hc]
+    · simp; exact ih (hbnd id hid)
+    · simp
 
 theorem rootD_fuel_extra {parent : Array EClassId} {id : EClassId} {fuel : Nat}
     (hbnd : ∀ j, (hj : j < parent.size) → parent[j]'hj < parent.size)
@@ -226,7 +228,7 @@ theorem rootD_fuel_extra {parent : Array EClassId} {id : EClassId} {fuel : Nat}
     unfold rootD
     rw [dif_pos hid, dif_pos hid]
     cases hc : parent[id]'hid == id
-    · simp [hc]
+    · simp
       have hroot' : IsRootAt parent (rootD parent (parent[id]'hid) n) := by
         unfold rootD at hroot; rw [dif_pos hid] at hroot; simp [hc] at hroot; exact hroot
       exact ih (hbnd id hid) hroot'
@@ -344,10 +346,10 @@ theorem rootD_set_not_in_class {parent : Array EClassId} {k rt j : EClassId} {fu
         simp [Array.getElem_set, Ne.symm hjk]
       rw [hget]
       cases hc : parent[j]'hj == j
-      · simp [hc]
+      · simp
         apply ih
         intro heq; exact hj_ne (rootD_parent_step hbnd hacyc hj hc ▸ heq)
-      · simp [hc]
+      · simp
     · rw [dif_neg (by rw [hsz]; exact hj), dif_neg hj]
 
 /-- Generalization: if j is NOT in k's class, set k → v (arbitrary v) preserves rootD.
@@ -371,20 +373,20 @@ theorem rootD_set_other_class {parent : Array EClassId} {k v j : EClassId} {fuel
         simp [Array.getElem_set, Ne.symm hjk]
       rw [hget]
       cases hc : parent[j]'hj == j
-      · simp [hc]
+      · simp
         apply ih
         intro heq; exact hj_ne (rootD_parent_step hbnd hacyc hj hc ▸ heq)
-      · simp [hc]
+      · simp
     · rw [dif_neg (by rw [hsz]; exact hj), dif_neg hj]
 
 /-- If j IS in k's equivalence class (root = rt), then rootD on modified array = rt.
     Uses fuel induction with sufficiency condition: rootD parent j fuel = rt. -/
 theorem rootD_set_same_class {parent : Array EClassId} {k rt j : EClassId} {fuel : Nat}
-    (hbnd : ∀ i, (hi : i < parent.size) → parent[i]'hi < parent.size)
-    (hacyc : ∀ i, i < parent.size → IsRootAt parent (rootD parent i parent.size))
+    (_hbnd : ∀ i, (hi : i < parent.size) → parent[i]'hi < parent.size)
+    (_hacyc : ∀ i, i < parent.size → IsRootAt parent (rootD parent i parent.size))
     (hk : k < parent.size)
     (hrt_root : IsRootAt parent rt)
-    (hrt_eq : rootD parent k parent.size = rt)
+    (_hrt_eq : rootD parent k parent.size = rt)
     (hjfuel : rootD parent j fuel = rt) :
     rootD (parent.set k rt) j fuel = rt := by
   induction fuel generalizing j with
@@ -402,7 +404,7 @@ theorem rootD_set_same_class {parent : Array EClassId} {k rt j : EClassId} {fuel
         rw [hget]
         cases hrtj : rt == j
         · -- rt ≠ j: follow to rt, which is a root in modified array
-          simp [hrtj]
+          simp
           have hrtne : rt ≠ k := by
             intro h; simp [BEq.beq, h, hjk] at hrtj
           have hrt_mod : IsRootAt (parent.set k rt) rt := IsRootAt_set_ne hrt_root hrtne hk
@@ -417,7 +419,7 @@ theorem rootD_set_same_class {parent : Array EClassId} {k rt j : EClassId} {fuel
         rw [hget]
         cases hc : parent[j]'hj == j
         · -- parent[j] ≠ j: recurse
-          simp [hc]
+          simp
           apply ih
           -- Need: rootD parent (parent[j]) n = rt
           -- From hjfuel: rootD parent j (n+1) = rt, unfolding gives rootD parent (parent[j]) n = rt
@@ -426,7 +428,7 @@ theorem rootD_set_same_class {parent : Array EClassId} {k rt j : EClassId} {fuel
           rw [dif_pos hj] at this; simp [hc] at this
           exact this
         · -- parent[j] = j: j is a root, so j = rt
-          simp [hc]
+          simp
           -- hjfuel: rootD parent j (n+1) = rt. Since parent[j] = j, rootD returns j. So j = rt.
           have : rootD parent j (n + 1) = rt := hjfuel
           unfold rootD at this; rw [dif_pos hj] at this; simp [hc] at this
@@ -499,7 +501,7 @@ theorem compressPath_preserves_rootD {parent : Array EClassId} {id rt j : EClass
           intro i hi'
           simp only [hsz] at hi' ⊢
           by_cases hik : id = i
-          · simp [Array.getElem_set, hik]; exact hrt_root.1
+          · simp [hik]; exact hrt_root.1
           · simp [Array.getElem_set, hik]; exact hbnd i hi'
         -- (2) Acyclic
         have hacyc' : ∀ i, i < (parent.set id rt).size →
@@ -524,7 +526,7 @@ theorem compressPath_preserves_rootD {parent : Array EClassId} {id rt j : EClass
             obtain ⟨hlt_rt, hself_rt⟩ := hrt_root
             refine ⟨by simp [hsz]; exact hlt_rt, ?_⟩
             by_cases hrt_eq_id : id = rt
-            · simp [Array.getElem_set, hrt_eq_id]
+            · simp [hrt_eq_id]
             · simp [Array.getElem_set, hrt_eq_id]; exact hself_rt
           · -- The root r ≠ id; it's unchanged in modified array
             refine ⟨by simp [hsz]; exact hlt_r, ?_⟩
@@ -534,7 +536,7 @@ theorem compressPath_preserves_rootD {parent : Array EClassId} {id rt j : EClass
           by_cases hrtid : rt = id
           · obtain ⟨hlt_rt, hself_rt⟩ := hrt_root
             refine ⟨by simp [hsz]; exact hlt_rt, ?_⟩
-            simp [Array.getElem_set, hrtid.symm]
+            simp [hrtid.symm]
           · exact IsRootAt_set_ne hrt_root hrtid hid
         -- (4) rootD (modified) (parent[id]) = rt
         have hrt_eq' : rootD (parent.set id rt) (parent[id]'hid)

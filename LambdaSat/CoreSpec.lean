@@ -4,6 +4,9 @@
   Generalized from VR1CS-Lean v1.3.0 (replaces concrete types with generic Op).
 -/
 import LambdaSat.Core
+set_option linter.unusedSectionVars false
+set_option linter.unusedSimpArgs false
+set_option linter.unusedVariables false
 
 namespace LambdaSat
 

@@ -6,6 +6,8 @@
 -/
 import LambdaSat.CoreSpec
 import LambdaSat.EMatch
+set_option linter.unusedSectionVars false
+set_option linter.unusedSimpArgs false
 
 namespace LambdaSat
 
@@ -1063,12 +1065,340 @@ theorem merge_preserves_hashcons_classes_aligned (g : EGraph Op) (id1 id2 : ECla
       exact ⟨cls, hcls, hmem⟩
 
 -- ══════════════════════════════════════════════════════════════════
--- Section 12: Conditional saturation step (stretch)
+-- Section 12: SemanticHashconsInv — weak hashcons invariant for rebuild
 -- ══════════════════════════════════════════════════════════════════
 
--- Saturation soundness is now provided by SaturationSpec.lean:
---   - `saturateF_preserves_consistent`: main saturation loop preserves ∃v', CV
---   - `sound_rule_preserves_consistency`: individual rule application preserves CV
--- See LambdaSat/SoundRule.lean and LambdaSat/SaturationSpec.lean.
+/-- Semantic hashcons invariant: every hashcons entry `(nd, id)` satisfies
+    `NodeEval nd env v = v (root uf id)`.
+
+    This is strictly weaker than `HashconsClassesAligned ∧ ConsistentValuation`:
+    it only captures the semantic consequence, not the structural membership.
+    The key property is that SHI is preserved through `processClass`'s hashcons
+    updates (erase + insert), whereas `HashconsClassesAligned` breaks during
+    the processAll foldl because processClass modifies hashcons without
+    updating classes. -/
+def SemanticHashconsInv (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val) : Prop :=
+  ∀ nd id, g.hashcons.get? nd = some id →
+    NodeEval nd env v = v (root g.unionFind id)
+
+/-- SHI is derivable from `HashconsClassesAligned + ConsistentValuation + WellFormed`. -/
+theorem hca_cv_implies_shi (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v) (hwf : WellFormed g.unionFind)
+    (hca : HashconsClassesAligned g) :
+    SemanticHashconsInv g env v := by
+  intro nd id hget
+  obtain ⟨cls, hcls, hmem⟩ := hca nd id hget
+  exact (hcv.2 id cls hcls nd hmem).trans (consistent_root_eq' g env v hcv hwf id).symm
+
+/-- SHI is derivable from `EGraphWF + ConsistentValuation`. -/
+theorem ewf_cv_implies_shi (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val)
+    (hwf : EGraphWF g) (hcv : ConsistentValuation g env v) :
+    SemanticHashconsInv g env v :=
+  hca_cv_implies_shi g env v hcv hwf.uf_wf hwf.hashcons_classes_aligned
+
+/-- SHI holds vacuously for the empty e-graph. -/
+theorem empty_shi [Inhabited Val] (env : Nat → Val) :
+    SemanticHashconsInv (Op := Op) EGraph.empty env (fun _ => default) := by
+  intro nd id h
+  simp [EGraph.empty, Std.HashMap.get?_eq_getElem?, Std.HashMap.ofList_nil] at h
+
+omit [LawfulBEq Op] [LawfulHashable Op] in
+/-- Clearing worklist/dirtyArr preserves SHI (hashcons and UF unchanged). -/
+theorem clear_worklist_shi (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val)
+    (hshi : SemanticHashconsInv g env v) :
+    SemanticHashconsInv { g with worklist := ([] : List EClassId), dirtyArr := #[] } env v :=
+  hshi
+
+/-- merge preserves SHI when the merged classes have equal values.
+    merge doesn't change hashcons, and root changes are compatible. -/
+theorem merge_preserves_shi (g : EGraph Op) (id1 id2 : EClassId)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hshi : SemanticHashconsInv g env v)
+    (hcv : ConsistentValuation g env v)
+    (hwf : WellFormed g.unionFind)
+    (h1 : id1 < g.unionFind.parent.size) (h2 : id2 < g.unionFind.parent.size)
+    (heq : v (root g.unionFind id1) = v (root g.unionFind id2)) :
+    SemanticHashconsInv (g.merge id1 id2) env v := by
+  intro nd mid hget
+  rw [merge_hashcons] at hget
+  have hshi_orig := hshi nd mid hget
+  have hcv_merged := merge_consistent g id1 id2 env v hcv hwf h1 h2 heq
+  rw [hshi_orig]
+  exact (consistent_root_eq' g env v hcv hwf mid).trans
+    (consistent_root_eq' (g.merge id1 id2) env v hcv_merged
+      (merge_preserves_uf_wf' g id1 id2 hwf h1) mid).symm
+
+/-- mergeAll preserves SHI when CV and WF are threaded alongside.
+    Follows the same induction pattern as mergeAll_consistent. -/
+theorem mergeAll_preserves_shi : ∀ (merges : List (EClassId × EClassId))
+    (g : EGraph Op) (env : Nat → Val) (v : EClassId → Val),
+    ConsistentValuation g env v →
+    WellFormed g.unionFind →
+    SemanticHashconsInv g env v →
+    (∀ p ∈ merges, v p.1 = v p.2) →
+    (∀ p ∈ merges, p.1 < g.unionFind.parent.size ∧ p.2 < g.unionFind.parent.size) →
+    SemanticHashconsInv (merges.foldl (fun acc (id1, id2) => acc.merge id1 id2) g) env v := by
+  intro merges
+  induction merges with
+  | nil => intro _ _ _ _ _ hshi _ _; exact hshi
+  | cons hd tl ih =>
+    intro g env v hcv hwf hshi hval hbnd
+    simp only [List.foldl_cons]
+    have hhd_val := hval hd (.head _)
+    have hhd_bnd := hbnd hd (.head _)
+    have heq : v (root g.unionFind hd.1) = v (root g.unionFind hd.2) := by
+      rw [consistent_root_eq' g env v hcv hwf hd.1,
+          consistent_root_eq' g env v hcv hwf hd.2]; exact hhd_val
+    have hshi' := merge_preserves_shi g hd.1 hd.2 env v hshi hcv hwf hhd_bnd.1 hhd_bnd.2 heq
+    have hcv' := merge_consistent g hd.1 hd.2 env v hcv hwf hhd_bnd.1 hhd_bnd.2 heq
+    have hwf' := merge_preserves_uf_wf' g hd.1 hd.2 hwf hhd_bnd.1
+    have hsz := merge_uf_size g hd.1 hd.2
+    exact ih (g.merge hd.1 hd.2) env v hcv' hwf' hshi'
+      (fun p hp => hval p (.tail _ hp))
+      (fun p hp => by rw [hsz]; exact hbnd p (.tail _ hp))
+
+-- ══════════════════════════════════════════════════════════════════
+-- Section 13: processClass preserves SHI + merge validity
+-- ══════════════════════════════════════════════════════════════════
+
+/-- processClass preserves SHI and produces semantically valid merge pairs.
+    This is the key enabler for closing the rebuildStepBody sorry:
+    unlike `processClass_merges_semantically_valid` (which needs HCA),
+    this only needs SHI (which IS preserved through processAll's foldl). -/
+theorem processClass_shi_combined (g : EGraph Op) (classId : EClassId)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hshi : SemanticHashconsInv g env v)
+    (hpmi : PostMergeInvariant g) :
+    SemanticHashconsInv (g.processClass classId).1 env v ∧
+    (∀ pr ∈ (g.processClass classId).2,
+      v (root g.unionFind pr.1) = v (root g.unionFind pr.2)) := by
+  unfold EGraph.processClass
+  simp only [EGraph.find, find_fst_eq_root]
+  -- g1 = {g with uf := find(uf, classId).2}, canonId = root g.uf classId
+  have g1_roots : ∀ k, root (g.unionFind.find classId).2 k = root g.unionFind k :=
+    fun k => find_preserves_roots g.unionFind classId k hpmi.uf_wf
+  have g1_wf : WellFormed (g.unionFind.find classId).2 :=
+    find_preserves_wf g.unionFind classId hpmi.uf_wf
+  have g1_sz : (g.unionFind.find classId).2.parent.size = g.unionFind.parent.size :=
+    find_snd_size g.unionFind classId
+  split
+  · -- none: no class found
+    exact ⟨fun nd id hget => by rw [hshi nd id hget]; congr 1; exact (g1_roots id).symm,
+      fun _ h => nomatch h⟩
+  · -- some eclass
+    rename_i eclass heclass
+    have hcls_canon : g.classes.get? (root g.unionFind classId) = some eclass := by
+      rwa [Std.HashMap.get?_eq_getElem?]
+    have canonId_bnd : root g.unionFind classId < g.unionFind.parent.size := by
+      apply hpmi.classes_entries_valid
+      rw [Std.HashMap.contains_eq_isSome_getElem?,
+          show g.classes[root g.unionFind classId]? =
+            g.classes.get? (root g.unionFind classId) from
+            (Std.HashMap.get?_eq_getElem? ..).symm,
+          hcls_canon]; rfl
+    -- Thread ((SHI ∧ merges_valid), roots, wf, size) through the inner foldl
+    -- Group first two conjuncts so .1 matches the goal
+    have h_base :
+        (fun (r : EGraph Op × List (EClassId × EClassId)) =>
+          (SemanticHashconsInv r.1 env v ∧ (∀ pr ∈ r.2, v (root g.unionFind pr.1) = v (root g.unionFind pr.2))) ∧
+          (∀ k, root r.1.unionFind k = root g.unionFind k) ∧
+          WellFormed r.1.unionFind ∧
+          r.1.unionFind.parent.size = g.unionFind.parent.size)
+        ({ unionFind := (g.unionFind.find classId).2, hashcons := g.hashcons,
+           classes := g.classes, worklist := g.worklist, dirtyArr := g.dirtyArr }, []) :=
+      ⟨⟨(fun nd id hget => by rw [hshi nd id hget]; congr 1; exact (g1_roots id).symm),
+        (fun _ h => nomatch h)⟩, (fun k => g1_roots k), g1_wf, g1_sz⟩
+    exact (@Array.foldl_induction (ENode Op) (EGraph Op × List (EClassId × EClassId))
+      eclass.nodes
+      (fun _ (r : EGraph Op × List (EClassId × EClassId)) =>
+        (SemanticHashconsInv r.1 env v ∧ (∀ pr ∈ r.2, v (root g.unionFind pr.1) = v (root g.unionFind pr.2))) ∧
+        (∀ k, root r.1.unionFind k = root g.unionFind k) ∧
+        WellFormed r.1.unionFind ∧
+        r.1.unionFind.parent.size = g.unionFind.parent.size)
+      _
+      h_base
+      _
+      (fun ⟨i, hi⟩ b ih => by
+        obtain ⟨acc, merges⟩ := b
+        obtain ⟨⟨ih_shi, ih_sem⟩, ih_roots, ih_wf, ih_sz⟩ := ih
+        dsimp only at ih_shi ih_sem ih_roots ih_wf ih_sz ⊢
+        -- Properties after canonicalize
+        have a1_hcs := canonicalize_hashcons acc eclass.nodes[i]
+        have a1_roots : ∀ k, root (acc.canonicalize eclass.nodes[i]).2.unionFind k =
+            root g.unionFind k :=
+          fun k => by rw [canonicalize_preserves_roots acc _ ih_wf]; exact ih_roots k
+        have a1_wf := canonicalize_uf_wf acc eclass.nodes[i] ih_wf
+        have a1_sz : (acc.canonicalize eclass.nodes[i]).2.unionFind.parent.size =
+            g.unionFind.parent.size := by
+          rw [canonicalize_uf_size]; exact ih_sz
+        -- SHI for acc1 (canonicalize doesn't change hashcons)
+        have a1_shi : SemanticHashconsInv (acc.canonicalize eclass.nodes[i]).2 env v := by
+          intro nd id hget; rw [a1_hcs] at hget
+          have := ih_shi nd id hget
+          rw [this]; congr 1; exact (ih_roots id).trans (a1_roots id).symm
+        -- Derive UF-consistency of v from root preservation
+        have acc_cv : ∀ a b, root acc.unionFind a = root acc.unionFind b → v a = v b :=
+          fun a b h => hcv.1 a b (by rw [← ih_roots a, ← ih_roots b]; exact h)
+        -- Children bounded in acc
+        have hmem_i : eclass.nodes[i] ∈ eclass.nodes.toList :=
+          Array.mem_toList_iff.mpr (Array.getElem_mem hi)
+        have hbnd_i : ∀ c ∈ (eclass.nodes[i]).children, c < acc.unionFind.parent.size := by
+          intro c hc; rw [ih_sz]
+          exact hpmi.children_bounded _ eclass hcls_canon _ hmem_i c hc
+        -- nodeEval_canonical + CV combined
+        have heval_canon : NodeEval (acc.canonicalize eclass.nodes[i]).1 env v =
+            v (root g.unionFind classId) :=
+          (nodeEval_canonical acc eclass.nodes[i] env v acc_cv ih_wf hbnd_i).trans
+            (hcv.2 (root g.unionFind classId) eclass hcls_canon _ hmem_i)
+        split
+        · -- Case 1: canonNode == node, no hashcons change
+          exact ⟨⟨a1_shi, ih_sem⟩, a1_roots, a1_wf, a1_sz⟩
+        · -- Case 2: canonNode ≠ node
+          rename_i hne_beq
+          -- SHI for erased hashcons
+          have erase_shi : ∀ nd id,
+              ((acc.canonicalize eclass.nodes[i]).2.hashcons.erase eclass.nodes[i]).get? nd =
+                some id →
+              NodeEval nd env v = v (root g.unionFind id) := by
+            intro nd id hget
+            by_cases hnn : eclass.nodes[i] = nd
+            · subst hnn; rw [hashcons_get?_erase_self] at hget; exact nomatch hget
+            · rw [hashcons_get?_erase_ne _ _ _ hnn, a1_hcs] at hget
+              rw [ih_shi nd id hget, ih_roots]
+          -- SHI for inserted hashcons
+          have insert_shi : ∀ nd id,
+              (((acc.canonicalize eclass.nodes[i]).2.hashcons.erase eclass.nodes[i]).insert
+                (acc.canonicalize eclass.nodes[i]).1 (root g.unionFind classId)).get? nd =
+                some id →
+              NodeEval nd env v = v (root g.unionFind id) := by
+            intro nd id hget
+            by_cases hcn : (acc.canonicalize eclass.nodes[i]).1 = nd
+            · subst hcn; rw [hashcons_get?_insert_self] at hget
+              rw [heval_canon, Option.some.inj hget.symm]
+              exact (consistent_root_eq' g env v hcv hpmi.uf_wf (root g.unionFind classId)).symm
+            · rw [hashcons_get?_insert_ne _ _ _ _ hcn] at hget
+              exact erase_shi nd id hget
+          -- SHI for the new graph with updated hashcons
+          have new_shi : SemanticHashconsInv
+              { (acc.canonicalize eclass.nodes[i]).2 with
+                hashcons := ((acc.canonicalize eclass.nodes[i]).2.hashcons.erase eclass.nodes[i]).insert
+                  (acc.canonicalize eclass.nodes[i]).1 (root g.unionFind classId) } env v := by
+            intro nd id hget; simp only [] at hget
+            rw [insert_shi nd id hget, a1_roots]
+          split
+          · -- Subcase: existing entry found → emit merge
+            rename_i existingId hexists
+            refine ⟨⟨new_shi, ?_⟩, a1_roots, a1_wf, a1_sz⟩
+            intro pr hpr
+            simp only [List.mem_cons] at hpr
+            rcases hpr with rfl | hpr
+            · simp only []
+              have h_ex := erase_shi _ _ hexists
+              exact (consistent_root_eq' g env v hcv hpmi.uf_wf (root g.unionFind classId)).trans
+                (heval_canon.symm.trans h_ex)
+            · exact ih_sem pr hpr
+          · -- Subcase: no existing entry
+            exact ⟨⟨new_shi, ih_sem⟩, a1_roots, a1_wf, a1_sz⟩)).1
+
+-- ══════════════════════════════════════════════════════════════════
+-- Section 14: rebuildStepBody preserves CV (closes sorry)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- processAll preserves CV + SHI and produces valid merge pairs.
+    Threads (CV, SHI, PMI, merge_validity, roots_eq, size_eq) through the foldl. -/
+theorem processAll_preserves_cv_shi : ∀ (toProcess : List EClassId)
+    (g : EGraph Op) (merges : List (EClassId × EClassId))
+    (env : Nat → Val) (v : EClassId → Val),
+    ConsistentValuation g env v →
+    PostMergeInvariant g →
+    SemanticHashconsInv g env v →
+    (∀ pr ∈ merges, v (root g.unionFind pr.1) = v (root g.unionFind pr.2)) →
+    let result := toProcess.foldl
+      (fun (am : EGraph Op × List (EClassId × EClassId)) (cid : EClassId) =>
+        ((am.1.processClass cid).1, (am.1.processClass cid).2 ++ am.2))
+      (g, merges)
+    ConsistentValuation result.1 env v ∧
+    SemanticHashconsInv result.1 env v ∧
+    (∀ pr ∈ result.2, v (root g.unionFind pr.1) = v (root g.unionFind pr.2)) ∧
+    (∀ k, root result.1.unionFind k = root g.unionFind k) := by
+  intro toProcess
+  induction toProcess with
+  | nil => intro g merges env v hcv _ hshi hm; exact ⟨hcv, hshi, hm, fun _ => rfl⟩
+  | cons cid rest ih =>
+    intro g merges env v hcv hpmi hshi hm
+    simp only [List.foldl_cons]
+    have hcv' := processClass_consistent g cid env v hcv hpmi.uf_wf
+    have hpmi' := processClass_preserves_pmi g cid hpmi
+    have ⟨hshi', hmerges'⟩ := processClass_shi_combined g cid env v hcv hshi hpmi
+    have hroots := processClass_preserves_roots g cid hpmi.uf_wf
+    have hm' : ∀ pr ∈ (g.processClass cid).2 ++ merges,
+        v (root g.unionFind pr.1) = v (root g.unionFind pr.2) := by
+      intro pr hpr
+      simp only [List.mem_append] at hpr
+      rcases hpr with hpr | hpr
+      · exact hmerges' pr hpr
+      · exact hm pr hpr
+    have hm_adj : ∀ pr ∈ (g.processClass cid).2 ++ merges,
+        v (root (g.processClass cid).1.unionFind pr.1) =
+        v (root (g.processClass cid).1.unionFind pr.2) := by
+      intro pr hpr; rw [hroots pr.1, hroots pr.2]; exact hm' pr hpr
+    have ⟨hcv_final, hshi_final, hm_final, hroots_final⟩ :=
+      ih (g.processClass cid).1 ((g.processClass cid).2 ++ merges) env v
+        hcv' hpmi' hshi' hm_adj
+    refine ⟨hcv_final, hshi_final, fun pr hpr => ?_, fun k => ?_⟩
+    · have := hm_final pr hpr; simp only [hroots] at this; exact this
+    · rw [hroots_final, hroots]
+
+/-- Core rebuild fact: processAll then mergeAll preserves the triple. -/
+private theorem rebuildStep_preserves_triple_aux (g1 : EGraph Op)
+    (toProcess : List EClassId) (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g1 env v)
+    (hpmi : PostMergeInvariant g1)
+    (hshi : SemanticHashconsInv g1 env v) :
+    let pa := toProcess.foldl
+      (fun (am : EGraph Op × List (EClassId × EClassId)) (cid : EClassId) =>
+        ((am.1.processClass cid).1, (am.1.processClass cid).2 ++ am.2))
+      (g1, ([] : List (EClassId × EClassId)))
+    ConsistentValuation (pa.2.foldl (fun acc (id1, id2) => acc.merge id1 id2) pa.1) env v ∧
+    PostMergeInvariant (pa.2.foldl (fun acc (id1, id2) => acc.merge id1 id2) pa.1) ∧
+    SemanticHashconsInv (pa.2.foldl (fun acc (id1, id2) => acc.merge id1 id2) pa.1) env v := by
+  intro pa
+  have ⟨hcv2, hshi2, hmerges_valid, hroots2⟩ := processAll_preserves_cv_shi
+    toProcess g1 [] env v hcv hpmi hshi (fun _ h => nomatch h)
+  have ⟨hpmi2, hsize2, hbnd2⟩ := processAll_preserves_pmi toProcess g1 []
+    hpmi (fun _ h => nomatch h)
+  have hval : ∀ p ∈ pa.2, v p.1 = v p.2 := by
+    intro p hp
+    have hroot := hmerges_valid p hp
+    have hcre1 := consistent_root_eq' pa.1 env v hcv2 hpmi2.uf_wf p.1
+    have hcre2 := consistent_root_eq' pa.1 env v hcv2 hpmi2.uf_wf p.2
+    calc v p.1
+        _ = v (root pa.1.unionFind p.1) := hcre1.symm
+        _ = v (root g1.unionFind p.1) := by congr 1; exact hroots2 p.1
+        _ = v (root g1.unionFind p.2) := hroot
+        _ = v (root pa.1.unionFind p.2) := by congr 1; exact (hroots2 p.2).symm
+        _ = v p.2 := hcre2
+  have hbnd_sz : ∀ p ∈ pa.2,
+      p.1 < pa.1.unionFind.parent.size ∧ p.2 < pa.1.unionFind.parent.size := by
+    intro p hp; rw [hsize2]; exact hbnd2 p hp
+  exact ⟨mergeAll_consistent pa.2 pa.1 env v hcv2 hpmi2.uf_wf hval hbnd_sz,
+    mergeAll_preserves_pmi pa.2 pa.1 hpmi2 hbnd_sz,
+    mergeAll_preserves_shi pa.2 pa.1 env v hcv2 hpmi2.uf_wf hshi2 hval hbnd_sz⟩
+
+/-- rebuildStepBody preserves ConsistentValuation (same v), using SHI.
+    Also preserves PostMergeInvariant and SemanticHashconsInv for threading. -/
+theorem rebuildStepBody_preserves_triple (g : EGraph Op)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g)
+    (hshi : SemanticHashconsInv g env v) :
+    ConsistentValuation (rebuildStepBody g) env v ∧
+    PostMergeInvariant (rebuildStepBody g) ∧
+    SemanticHashconsInv (rebuildStepBody g) env v :=
+  rebuildStep_preserves_triple_aux
+    { g with worklist := [], dirtyArr := #[] }
+    (g.worklist ++ g.dirtyArr.toList) env v
+    hcv (clear_worklist_pmi g hpmi) (clear_worklist_shi g env v hshi)
 
 end LambdaSat

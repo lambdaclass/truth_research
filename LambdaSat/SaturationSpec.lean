@@ -88,10 +88,11 @@ variable [LawfulBEq Op] [LawfulHashable Op]
 
 -- instantiateF.go : Substitution → Nat → EGraph Op → List (Pattern Op) → List EClassId → ...
 
+set_option linter.unusedSectionVars false in
 /-- Helper: the inner `go` of instantiateF preserves AddExprInv. -/
 private theorem instantiateF_go_preserves_addExprInv (subst : Substitution) (fuel : Nat)
-    (ih : ∀ (g0 : EGraph Op) (pat0 : Pattern Op) (inv0 : AddExprInv g0)
-      (h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
+    (ih : ∀ (g0 : EGraph Op) (pat0 : Pattern Op) (_inv0 : AddExprInv g0)
+      (_h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
       ∀ id g', instantiateF fuel g0 pat0 subst = some (id, g') →
       AddExprInv g' ∧ id < g'.unionFind.parent.size ∧
       g0.unionFind.parent.size ≤ g'.unionFind.parent.size)
@@ -180,18 +181,19 @@ theorem instantiateF_preserves_addExprInv (fuel : Nat) (g : EGraph Op) (pat : Pa
 
 variable {Val : Type} [NodeSemantics Op Val]
 
+set_option linter.unusedSectionVars false in
 /-- Helper: the inner `go` of instantiateF preserves ConsistentValuation. -/
 private theorem instantiateF_go_preserves_consistency (subst : Substitution) (fuel : Nat)
     (env : Nat → Val)
-    (hrc : ReplaceChildrenSound Op)
+    (_hrc : ReplaceChildrenSound Op)
     (ih_cv : ∀ (g0 : EGraph Op) (pat0 : Pattern Op) (v0 : EClassId → Val)
-      (hv0 : ConsistentValuation g0 env v0) (inv0 : AddExprInv g0)
-      (h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
+      (_hv0 : ConsistentValuation g0 env v0) (_inv0 : AddExprInv g0)
+      (_h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
       ∀ id g', instantiateF fuel g0 pat0 subst = some (id, g') →
       ∃ v', ConsistentValuation g' env v' ∧
         ∀ i, i < g0.unionFind.parent.size → v' i = v0 i)
-    (ih_inv : ∀ (g0 : EGraph Op) (pat0 : Pattern Op) (inv0 : AddExprInv g0)
-      (h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
+    (ih_inv : ∀ (g0 : EGraph Op) (pat0 : Pattern Op) (_inv0 : AddExprInv g0)
+      (_h_s0 : ∀ pv id, subst.get? pv = some id → id < g0.unionFind.parent.size),
       ∀ id g', instantiateF fuel g0 pat0 subst = some (id, g') →
       AddExprInv g' ∧ id < g'.unionFind.parent.size ∧
       g0.unionFind.parent.size ≤ g'.unionFind.parent.size)
@@ -367,80 +369,99 @@ def saturateF (fuel : Nat) (maxIter : Nat) (rebuildFuel : Nat)
 -- Section 7: Soundness — Opcion A (assumes valid rule application)
 -- ══════════════════════════════════════════════════════════════════
 
-/-- Predicate: a step function preserves the existence of a consistent valuation.
-    This is the core composability property for the saturation pipeline. -/
+/-- Predicate: a step function preserves the triple (CV, PMI, SHI).
+    This is the core composability property for the saturation pipeline.
+    Superseded in v1.0.0 by `saturateF_preserves_consistent_internal` (EMatchSpec)
+    which derives this from ematchF_sound + PatternSoundRule + InstantiateEvalSound. -/
 def PreservesCV (env : Nat → Val) (step : EGraph Op → EGraph Op) : Prop :=
   ∀ (g : EGraph Op) (v : EClassId → Val),
     ConsistentValuation g env v →
-    ∃ v', ConsistentValuation (step g) env v'
+    PostMergeInvariant g →
+    SemanticHashconsInv g env v →
+    ∃ v', ConsistentValuation (step g) env v' ∧
+          PostMergeInvariant (step g) ∧
+          SemanticHashconsInv (step g) env v'
 
-/-- foldl preserves CV: if each element's step preserves CV,
-    then folding over the list preserves CV. -/
+set_option linter.unusedSectionVars false in
+/-- foldl preserves the triple when each element's step does. -/
 theorem foldl_preserves_cv {α : Type} (env : Nat → Val) (l : List α)
     (f : EGraph Op → α → EGraph Op)
     (hf : ∀ a ∈ l, PreservesCV env (fun g => f g a))
     (g : EGraph Op) (v : EClassId → Val)
-    (hcv : ConsistentValuation g env v) :
-    ∃ v', ConsistentValuation (l.foldl f g) env v' := by
+    (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g)
+    (hshi : SemanticHashconsInv g env v) :
+    ∃ v', ConsistentValuation (l.foldl f g) env v' ∧
+          PostMergeInvariant (l.foldl f g) ∧
+          SemanticHashconsInv (l.foldl f g) env v' := by
   induction l generalizing g v with
-  | nil => exact ⟨v, hcv⟩
+  | nil => exact ⟨v, hcv, hpmi, hshi⟩
   | cons a as ih =>
     have hmem : a ∈ a :: as := by simp
-    obtain ⟨v1, hcv1⟩ := hf a hmem g v hcv
-    exact ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1
+    obtain ⟨v1, hcv1, hpmi1, hshi1⟩ := hf a hmem g v hcv hpmi hshi
+    exact ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1 hpmi1 hshi1
 
-/-- rebuildStepBody preserves the existence of a consistent valuation.
-    Follows from processClass_consistent + mergeAll_consistent. -/
+/-- rebuildStepBody preserves the triple (CV, PMI, SHI) with the same v.
+    Uses SemanticHashconsInv to close the soundness gap. -/
 theorem rebuildStepBody_preserves_cv (env : Nat → Val) (g : EGraph Op)
-    (v : EClassId → Val) (hcv : ConsistentValuation g env v) :
-    ∃ v', ConsistentValuation (rebuildStepBody g) env v' := by
-  -- rebuildStepBody does processAll on worklist+dirtyArr, then mergeAll on pending
-  -- Both preserve CV (processClass_consistent + mergeAll_consistent from SemanticSpec)
-  sorry
+    (v : EClassId → Val) (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    ConsistentValuation (rebuildStepBody g) env v ∧
+    PostMergeInvariant (rebuildStepBody g) ∧
+    SemanticHashconsInv (rebuildStepBody g) env v :=
+  rebuildStepBody_preserves_triple g env v hcv hpmi hshi
 
-/-- rebuildF preserves the existence of a consistent valuation. -/
+/-- rebuildF preserves the triple with the same v. -/
 theorem rebuildF_preserves_cv (env : Nat → Val) (fuel : Nat)
-    (g : EGraph Op) (v : EClassId → Val) (hcv : ConsistentValuation g env v) :
-    ∃ v', ConsistentValuation (rebuildF g fuel) env v' := by
+    (g : EGraph Op) (v : EClassId → Val) (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    ConsistentValuation (rebuildF g fuel) env v ∧
+    PostMergeInvariant (rebuildF g fuel) ∧
+    SemanticHashconsInv (rebuildF g fuel) env v := by
   induction fuel generalizing g v with
-  | zero => exact ⟨v, hcv⟩
+  | zero => exact ⟨hcv, hpmi, hshi⟩
   | succ n ih =>
     simp only [rebuildF]
     split
-    · exact ⟨v, hcv⟩
-    · obtain ⟨v1, hcv1⟩ := rebuildStepBody_preserves_cv env g v hcv
-      exact ih (rebuildStepBody g) v1 hcv1
+    · exact ⟨hcv, hpmi, hshi⟩
+    · have ⟨hcv', hpmi', hshi'⟩ := rebuildStepBody_preserves_cv env g v hcv hpmi hshi
+      exact ih (rebuildStepBody g) v hcv' hpmi' hshi'
 
-/-- applyRulesF preserves CV when each rule application preserves CV. -/
+set_option linter.unusedSectionVars false in
+/-- applyRulesF preserves the triple when each rule application does. -/
 theorem applyRulesF_preserves_cv (fuel : Nat) (env : Nat → Val)
     (rules : List (RewriteRule Op))
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule))
     (g : EGraph Op) (v : EClassId → Val)
-    (hcv : ConsistentValuation g env v) :
-    ∃ v', ConsistentValuation (applyRulesF fuel g rules) env v' := by
+    (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    ∃ v', ConsistentValuation (applyRulesF fuel g rules) env v' ∧
+          PostMergeInvariant (applyRulesF fuel g rules) ∧
+          SemanticHashconsInv (applyRulesF fuel g rules) env v' := by
   simp only [applyRulesF]
   exact foldl_preserves_cv env rules (fun g r => applyRuleF fuel g r)
-    h_rules g v hcv
+    h_rules g v hcv hpmi hshi
 
 /-- Main soundness theorem: saturateF preserves ConsistentValuation
-    when each rule application preserves CV (Opcion A assumption).
-
-    This closes the soundness gap: the end-to-end pipeline theorem can
-    now assume this instead of the old placeholder. -/
+    when each rule application preserves the triple (Opcion A assumption).
+    Zero sorry — rebuild soundness proven via SemanticHashconsInv. -/
 theorem saturateF_preserves_consistent (fuel maxIter rebuildFuel : Nat)
     (g : EGraph Op) (rules : List (RewriteRule Op))
     (env : Nat → Val) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule)) :
     ∃ v', ConsistentValuation (saturateF fuel maxIter rebuildFuel g rules) env v' := by
   induction maxIter generalizing g v with
   | zero => exact ⟨v, hcv⟩
   | succ n ih =>
     simp only [saturateF]
-    obtain ⟨v1, hcv1⟩ := applyRulesF_preserves_cv fuel env rules h_rules g v hcv
-    obtain ⟨v2, hcv2⟩ := rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1
+    obtain ⟨v1, hcv1, hpmi1, hshi1⟩ :=
+      applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi
+    have ⟨hcv2, hpmi2, hshi2⟩ :=
+      rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1
     split
-    · exact ⟨v2, hcv2⟩
-    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v2 hcv2
+    · exact ⟨v1, hcv2⟩
+    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2
 
 end LambdaSat
