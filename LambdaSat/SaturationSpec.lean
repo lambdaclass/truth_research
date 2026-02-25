@@ -369,99 +369,159 @@ def saturateF (fuel : Nat) (maxIter : Nat) (rebuildFuel : Nat)
 -- Section 7: Soundness — Opcion A (assumes valid rule application)
 -- ══════════════════════════════════════════════════════════════════
 
-/-- Predicate: a step function preserves the triple (CV, PMI, SHI).
+/-- Predicate: a step function preserves the quadruple (CV, PMI, SHI, HCB).
     This is the core composability property for the saturation pipeline.
-    Superseded in v1.0.0 by `saturateF_preserves_consistent_internal` (EMatchSpec)
-    which derives this from ematchF_sound + PatternSoundRule + InstantiateEvalSound. -/
+    Extended in v1.1.0 to include HashconsChildrenBounded (needed by InstantiateEvalSound). -/
 def PreservesCV (env : Nat → Val) (step : EGraph Op → EGraph Op) : Prop :=
   ∀ (g : EGraph Op) (v : EClassId → Val),
     ConsistentValuation g env v →
     PostMergeInvariant g →
     SemanticHashconsInv g env v →
+    HashconsChildrenBounded g →
     ∃ v', ConsistentValuation (step g) env v' ∧
           PostMergeInvariant (step g) ∧
-          SemanticHashconsInv (step g) env v'
+          SemanticHashconsInv (step g) env v' ∧
+          HashconsChildrenBounded (step g)
 
 set_option linter.unusedSectionVars false in
-/-- foldl preserves the triple when each element's step does. -/
+/-- foldl preserves the quadruple when each element's step does. -/
 theorem foldl_preserves_cv {α : Type} (env : Nat → Val) (l : List α)
     (f : EGraph Op → α → EGraph Op)
     (hf : ∀ a ∈ l, PreservesCV env (fun g => f g a))
     (g : EGraph Op) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
     (hpmi : PostMergeInvariant g)
-    (hshi : SemanticHashconsInv g env v) :
+    (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g) :
     ∃ v', ConsistentValuation (l.foldl f g) env v' ∧
           PostMergeInvariant (l.foldl f g) ∧
-          SemanticHashconsInv (l.foldl f g) env v' := by
+          SemanticHashconsInv (l.foldl f g) env v' ∧
+          HashconsChildrenBounded (l.foldl f g) := by
   induction l generalizing g v with
-  | nil => exact ⟨v, hcv, hpmi, hshi⟩
+  | nil => exact ⟨v, hcv, hpmi, hshi, hhcb⟩
   | cons a as ih =>
     have hmem : a ∈ a :: as := by simp
-    obtain ⟨v1, hcv1, hpmi1, hshi1⟩ := hf a hmem g v hcv hpmi hshi
-    exact ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1 hpmi1 hshi1
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ := hf a hmem g v hcv hpmi hshi hhcb
+    exact ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1 hpmi1 hshi1 hhcb1
 
-/-- rebuildStepBody preserves the triple (CV, PMI, SHI) with the same v.
-    Uses SemanticHashconsInv to close the soundness gap. -/
+/-- processAll preserves HashconsChildrenBounded. -/
+private theorem processAll_preserves_hcb :
+    ∀ (toProcess : List EClassId) (g : EGraph Op)
+      (merges : List (EClassId × EClassId)),
+    PostMergeInvariant g → HashconsChildrenBounded g →
+    let result := toProcess.foldl
+      (fun (am : EGraph Op × List (EClassId × EClassId)) (cid : EClassId) =>
+        ((am.1.processClass cid).1, (am.1.processClass cid).2 ++ am.2))
+      (g, merges)
+    HashconsChildrenBounded result.1 := by
+  intro toProcess
+  induction toProcess with
+  | nil => intro g _ _ hhcb; exact hhcb
+  | cons hd tl ih =>
+    intro g merges hpmi hhcb
+    simp only [List.foldl_cons]
+    exact ih _ _ (processClass_preserves_pmi g hd hpmi)
+      (processClass_preserves_hcb g hd hpmi hhcb)
+
+/-- merge preserves HashconsChildrenBounded (inline, since AddNodeTriple not imported). -/
+private theorem merge_preserves_hcb' (g : EGraph Op) (a b : EClassId)
+    (hhcb : HashconsChildrenBounded g) :
+    HashconsChildrenBounded (g.merge a b) := by
+  intro nd nid hget c hc
+  rw [merge_hashcons] at hget; rw [merge_uf_size]
+  exact hhcb nd nid hget c hc
+
+/-- mergeAll preserves HashconsChildrenBounded. -/
+private theorem mergeAll_preserves_hcb :
+    ∀ (merges : List (EClassId × EClassId)) (g : EGraph Op),
+    HashconsChildrenBounded g →
+    HashconsChildrenBounded (merges.foldl (fun acc p => acc.merge p.1 p.2) g) := by
+  intro merges
+  induction merges with
+  | nil => intro g h; exact h
+  | cons p ps ih => intro g h; exact ih _ (merge_preserves_hcb' g p.1 p.2 h)
+
+/-- rebuildStepBody preserves HashconsChildrenBounded. -/
+private theorem rebuildStepBody_preserves_hcb (g : EGraph Op)
+    (hpmi : PostMergeInvariant g) (hhcb : HashconsChildrenBounded g) :
+    HashconsChildrenBounded (rebuildStepBody g) := by
+  have hpmi1 := clear_worklist_pmi g hpmi
+  have hhcb1 : HashconsChildrenBounded
+      ({ g with worklist := ([] : List EClassId), dirtyArr := #[] } : EGraph Op) := hhcb
+  have h_proc := processAll_preserves_hcb (g.worklist ++ g.dirtyArr.toList)
+    { g with worklist := [], dirtyArr := #[] } [] hpmi1 hhcb1
+  exact mergeAll_preserves_hcb _ _ h_proc
+
+/-- rebuildStepBody preserves the quadruple (CV, PMI, SHI, HCB) with the same v.
+    HCB preservation: processClass canonicalizes children (roots are bounded by WF),
+    and merge doesn't touch hashcons. -/
 theorem rebuildStepBody_preserves_cv (env : Nat → Val) (g : EGraph Op)
     (v : EClassId → Val) (hcv : ConsistentValuation g env v)
-    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g) :
     ConsistentValuation (rebuildStepBody g) env v ∧
     PostMergeInvariant (rebuildStepBody g) ∧
-    SemanticHashconsInv (rebuildStepBody g) env v :=
-  rebuildStepBody_preserves_triple g env v hcv hpmi hshi
+    SemanticHashconsInv (rebuildStepBody g) env v ∧
+    HashconsChildrenBounded (rebuildStepBody g) :=
+  let ⟨hcv', hpmi', hshi'⟩ := rebuildStepBody_preserves_triple g env v hcv hpmi hshi
+  ⟨hcv', hpmi', hshi', rebuildStepBody_preserves_hcb g hpmi hhcb⟩
 
-/-- rebuildF preserves the triple with the same v. -/
+/-- rebuildF preserves the quadruple with the same v. -/
 theorem rebuildF_preserves_cv (env : Nat → Val) (fuel : Nat)
     (g : EGraph Op) (v : EClassId → Val) (hcv : ConsistentValuation g env v)
-    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g) :
     ConsistentValuation (rebuildF g fuel) env v ∧
     PostMergeInvariant (rebuildF g fuel) ∧
-    SemanticHashconsInv (rebuildF g fuel) env v := by
+    SemanticHashconsInv (rebuildF g fuel) env v ∧
+    HashconsChildrenBounded (rebuildF g fuel) := by
   induction fuel generalizing g v with
-  | zero => exact ⟨hcv, hpmi, hshi⟩
+  | zero => exact ⟨hcv, hpmi, hshi, hhcb⟩
   | succ n ih =>
     simp only [rebuildF]
     split
-    · exact ⟨hcv, hpmi, hshi⟩
-    · have ⟨hcv', hpmi', hshi'⟩ := rebuildStepBody_preserves_cv env g v hcv hpmi hshi
-      exact ih (rebuildStepBody g) v hcv' hpmi' hshi'
+    · exact ⟨hcv, hpmi, hshi, hhcb⟩
+    · have ⟨hcv', hpmi', hshi', hhcb'⟩ :=
+        rebuildStepBody_preserves_cv env g v hcv hpmi hshi hhcb
+      exact ih (rebuildStepBody g) v hcv' hpmi' hshi' hhcb'
 
 set_option linter.unusedSectionVars false in
-/-- applyRulesF preserves the triple when each rule application does. -/
+/-- applyRulesF preserves the quadruple when each rule application does. -/
 theorem applyRulesF_preserves_cv (fuel : Nat) (env : Nat → Val)
     (rules : List (RewriteRule Op))
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule))
     (g : EGraph Op) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
-    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v) :
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g) :
     ∃ v', ConsistentValuation (applyRulesF fuel g rules) env v' ∧
           PostMergeInvariant (applyRulesF fuel g rules) ∧
-          SemanticHashconsInv (applyRulesF fuel g rules) env v' := by
+          SemanticHashconsInv (applyRulesF fuel g rules) env v' ∧
+          HashconsChildrenBounded (applyRulesF fuel g rules) := by
   simp only [applyRulesF]
   exact foldl_preserves_cv env rules (fun g r => applyRuleF fuel g r)
-    h_rules g v hcv hpmi hshi
+    h_rules g v hcv hpmi hshi hhcb
 
 /-- Main soundness theorem: saturateF preserves ConsistentValuation
-    when each rule application preserves the triple (Opcion A assumption).
-    Zero sorry — rebuild soundness proven via SemanticHashconsInv. -/
+    when each rule application preserves the quadruple. -/
 theorem saturateF_preserves_consistent (fuel maxIter rebuildFuel : Nat)
     (g : EGraph Op) (rules : List (RewriteRule Op))
     (env : Nat → Val) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
     (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g)
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule)) :
     ∃ v', ConsistentValuation (saturateF fuel maxIter rebuildFuel g rules) env v' := by
   induction maxIter generalizing g v with
   | zero => exact ⟨v, hcv⟩
   | succ n ih =>
     simp only [saturateF]
-    obtain ⟨v1, hcv1, hpmi1, hshi1⟩ :=
-      applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi
-    have ⟨hcv2, hpmi2, hshi2⟩ :=
-      rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ :=
+      applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi hhcb
+    have ⟨hcv2, hpmi2, hshi2, hhcb2⟩ :=
+      rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1 hhcb1
     split
     · exact ⟨v1, hcv2⟩
-    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2
+    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2 hhcb2
 
 end LambdaSat

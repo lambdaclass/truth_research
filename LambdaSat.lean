@@ -40,5 +40,6 @@ import LambdaSat.ParallelSaturate
 import LambdaSat.Optimize
 import LambdaSat.SoundRule
 import LambdaSat.SaturationSpec
+import LambdaSat.AddNodeTriple
 import LambdaSat.EMatchSpec
 import LambdaSat.TranslationValidation

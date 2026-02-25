@@ -303,6 +303,137 @@
 
 ---
 
+## Criteria: Fase 8 — Discharge Hypotheses + Polish (v1.1.0)
+
+### Mechanical Checks (all nodes)
+
+<!-- CHECK:MECH-v1.1.0 -->
+| ID | Check | Method | Pass Criteria |
+|----|-------|--------|---------------|
+| `MECH-1` | Zero sorry | `grep -rn sorry LambdaSat/` | 0 matches (excluding comments) |
+| `MECH-2` | Zero custom axioms | `lean_verify` per new theorem | Only `propext`, `Quot.sound`, `Classical.choice` |
+| `MECH-3` | Clean build | `lake build` | Exit 0 |
+| `MECH-4` | Zero warnings | `lake build 2>&1` | No warnings |
+| `MECH-5` | No `native_decide` | Manual inspection | Only in `Decidable`/`Bool` contexts |
+| `MECH-6` | No `simp [*]` | Manual inspection | All `simp` with explicit lists or `simp only` |
+| `MECH-7` | Doc comments | Manual inspection | All new `def`, `theorem` with `/-- -/` |
+| `MECH-8` | `lean_verify` clean | MCP tool per theorem | Only standard axioms |
+
+### F8S1 — SameShapeSemantics_holds [FUND]
+
+<!-- CHECK:F8S1 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F8S1-THM-1` | Theorem proving SameShapeSemantics (or equivalent lemma) compiles without sorry | REQUIRED |
+| `F8S1-THM-2` | Uses only existing NodeSemantics axioms (evalOp_ext, evalOp_mapChildren, mapChildren_children) or minimal new preconditions | REQUIRED |
+| `F8S1-THM-3` | `lean_verify` shows zero custom axioms | REQUIRED |
+| `F8S1-EDGE-1` | Handles ops with empty children (leaf nodes like Const, Var) | CHECK |
+| `F8S1-EDGE-2` | Handles sameShape=false case (theorem simply doesn't apply) | CHECK |
+| `F8S1-ARCH-1` | Does NOT modify NodeSemantics typeclass definition | REQUIRED |
+| `F8S1-ARCH-2` | If precondition needed, it's trivially dischargeable for ArithOp | REQUIRED |
+| `F8S1-QUAL-1` | Proof ≤ 60 lines | CHECK |
+
+### F8S2 — ematchF_substitution_bounded [FUND]
+
+<!-- CHECK:F8S2 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F8S2-THM-1` | `ematchF_substitution_bounded`: ∀ σ ∈ ematchF fuel g pat classId, ∀ pv id, σ.get? pv = some id → id < g.uf.parent.size | REQUIRED |
+| `F8S2-THM-2` | Zero sorry | REQUIRED |
+| `F8S2-THM-3` | `lean_verify` shows zero custom axioms | REQUIRED |
+| `F8S2-EDGE-1` | fuel=0 → empty list (vacuous truth) | CHECK |
+| `F8S2-EDGE-2` | patVar case: σ has exactly 1 binding = classId | CHECK |
+| `F8S2-EDGE-3` | node case with no matching classes → empty result | CHECK |
+| `F8S2-STRESS-1` | Deep pattern (depth >> fuel) → empty result | CHECK |
+| `F8S2-ROBUST-1` | Composes with existing matchChildren_sound | REQUIRED |
+| `F8S2-QUAL-1` | Proof by structural induction on Pattern + fuel | CHECK |
+
+### F8S3 — InstantiateEvalSound_holds [CRIT/GATE]
+
+<!-- CHECK:F8S3 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F8S3-THM-1` | Theorem proving InstantiateEvalSound: instantiateF preserves CV + PMI + SHI + value correct | REQUIRED |
+| `F8S3-THM-2` | Value correctness: `v'(root g'.uf id) = Pattern.eval pat env (substVal v g.uf σ)` | REQUIRED |
+| `F8S3-THM-3` | Value agreement: `∀ i, i < g.uf.parent.size → v' i = v i` | REQUIRED |
+| `F8S3-THM-4` | Size monotonicity: `g.uf.parent.size ≤ g'.uf.parent.size` | REQUIRED |
+| `F8S3-THM-5` | Zero sorry | REQUIRED |
+| `F8S3-THM-6` | `lean_verify` shows zero custom axioms | REQUIRED |
+| `F8S3-EDGE-1` | patVar case: g unchanged, v' = v | CHECK |
+| `F8S3-EDGE-2` | node with empty subpats (leaf-like Pattern.node) | CHECK |
+| `F8S3-STRESS-1` | Deeply nested pattern (foldl over many subpats) | CHECK |
+| `F8S3-ROBUST-1` | Reutiliza instantiateF_preserves_consistency (no duplica) | REQUIRED |
+| `F8S3-ROBUST-2` | SHI preservation via add (not merge) path | CHECK |
+| `F8S3-QUAL-1` | Gate de-risk: sketch with sorry BEFORE dependents | REQUIRED |
+| `F8S3-QUAL-2` | Proof ≤ 250 lines | CHECK |
+
+### F8S4 — Update pipeline signatures [HOJA]
+
+<!-- CHECK:F8S4 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F8S4-SIG-1` | `full_pipeline_soundness_internal` has NO `SameShapeSemantics` hypothesis | REQUIRED |
+| `F8S4-SIG-2` | `full_pipeline_soundness_internal` has NO `InstantiateEvalSound` hypothesis | REQUIRED |
+| `F8S4-SIG-3` | `full_pipeline_soundness_internal` has NO `hematch_bnd` inline hypothesis | REQUIRED |
+| `F8S4-SIG-4` | Intermediate theorems (applyRuleAtF_sound, saturateF_preserves_consistent_internal) updated | REQUIRED |
+| `F8S4-BUILD-1` | Full `lake build` clean | REQUIRED |
+| `F8S4-ROBUST-1` | Path A theorems (full_pipeline_soundness_greedy) unchanged | REQUIRED |
+| `F8S4-ROBUST-2` | Old SoundRewriteRule path still works | REQUIRED |
+| `F8S4-DOC-1` | Docstrings updated to reflect "zero hypotheses" | REQUIRED |
+
+### F8S5 — P1-P5 docs and tests [HOJA]
+
+<!-- CHECK:F8S5 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F8S5-P1-1` | README.md theorem count matches actual (grep count) | REQUIRED |
+| `F8S5-P1-2` | README.md LOC count matches actual (wc -l) | REQUIRED |
+| `F8S5-P1-3` | README.md states "zero hypotheses" for Path B | REQUIRED |
+| `F8S5-P3-1` | ≥3 #eval edge-case tests added (empty graph, fuel=0, self-merge) | REQUIRED |
+| `F8S5-P4-1` | Integration tests still 8/8 PASS + new edge cases PASS | REQUIRED |
+| `F8S5-P5-1` | README documents TCB boundary for ParallelMatch/ParallelSaturate | REQUIRED |
+| `F8S5-P5-2` | P2 (SlimCheck) explicitly deferred to v1.2.0 with justification | REQUIRED |
+| `F8S5-DOC-1` | ARCHITECTURE.md Fase 8 marked completed | REQUIRED |
+| `F8S5-DOC-2` | BENCHMARKS.md: Fase 8 results recorded | REQUIRED |
+| `F8S5-TAG-1` | Git tag `v1.1.0` | REQUIRED |
+
+### Aggregate Targets (v1.1.0)
+
+| Métrica | Target | Stretch |
+|---------|--------|---------|
+| LOC total | ≥ 7,100 | ≥ 7,400 |
+| Teoremas total | ≥ 230 | ≥ 240 |
+| Sorry count | **0** | 0 |
+| Custom axioms | **0** | 0 |
+| Hipótesis en full_pipeline_soundness_internal | **0** (was 3) | 0 |
+| Integration tests | 8/8 PASS | 10+ PASS |
+| New theorems (Fase 8) | ≥ 5 | ≥ 10 |
+| `lake build` time | ≤ v1.0.0 + 10% | ≤ v1.0.0 |
+| Path B fully self-contained | YES | YES |
+
+### Cross-Cutting Criteria (v1.1.0)
+
+<!-- CHECK:CROSS-v1.1.0 -->
+| ID | Criteria |
+|----|----------|
+| `CROSS-1` | No regression: every v1.0.0 theorem compiles with identical or stronger statement |
+| `CROSS-2` | Sorry monotonic: 0 → 0 |
+| `CROSS-3` | Theorem count monotonic: v1.0.0(226) → v1.1.0(≥230) |
+| `CROSS-4` | Hypothesis count: v1.0.0(3) → v1.1.0(0) in full_pipeline_soundness_internal |
+| `CROSS-5` | Build reproducibility: `lake clean && lake build` succeeds |
+
+### Risk Assessment (v1.1.0)
+
+| Node | Risk | Mitigation |
+|------|------|------------|
+| F8S3 | HIGH | Gate de-risk: sketch with sorry before B22. Reutilizar patrón de processClass_shi_combined |
+| F8S1 | MEDIUM | De-risk: verify evalOp_mapChildren + LawfulBEq approach compiles before full proof |
+| F8S2 | LOW | Structural induction, ematchF read-only, reutiliza matchChildren_sound |
+| F8S4 | LOW | Mechanical replacement of hypotheses with theorem calls |
+| F8S5 | LOW | Documentation + tests, no proofs |
+
+---
+
 ## Legacy Results (pre-structured)
 
 > Benchmark results not linked to any identified phase. Preserved for reference.
@@ -354,6 +485,62 @@
 | Pure Lean B&B | Solo optimality | Fallback sin IO |
 
 ---
+
+### GATE: InstantiateEvalSound (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F8S3 InstantiateEvalSound_holds.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 1936 | — |
+| Theorems | — | 92 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 15 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### Pipeline + Polish (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F8S4 Update pipeline signatures, F8S5 P1-P5 docs and tests.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 0 | — |
+| Theorems | — | 0 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 0 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
 
 ## Previous Results
 

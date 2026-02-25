@@ -21,6 +21,15 @@ class NodeOps (Op : Type) where
   /-- Law: `mapChildren f` transforms the children list by `List.map f`. -/
   mapChildren_children : ∀ (f : EClassId → EClassId) (op : Op),
     children (mapChildren f op) = (children op).map f
+  /-- Law: `replaceChildren op ids` yields children `ids` when lengths match. -/
+  replaceChildren_children : ∀ (op : Op) (ids : List EClassId),
+    ids.length = (children op).length →
+    children (replaceChildren op ids) = ids
+  /-- Law: `replaceChildren` preserves the skeleton (mapChildren zeroing is invariant). -/
+  replaceChildren_sameShape : ∀ (op : Op) (ids : List EClassId),
+    ids.length = (children op).length →
+    mapChildren (fun _ => (0 : EClassId)) (replaceChildren op ids) =
+      mapChildren (fun _ => (0 : EClassId)) op
 
 /-- An e-node wraps a domain-specific operation. -/
 structure ENode (Op : Type) where

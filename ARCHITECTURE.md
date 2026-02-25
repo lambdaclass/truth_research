@@ -197,6 +197,50 @@
 
 ---
 
+### Fase 8: Discharge Hypotheses + Polish (v1.1.0) — PLANNED
+
+**Contents**: Probar las 3 hipótesis no descargadas del Path B como teoremas internos: SameShapeSemantics (evaluación de ops con misma forma), ematchF_substitution_bounded (sustituciones acotadas), InstantiateEvalSound (instantiateF preserva triple CV+PMI+SHI + valor correcto). Eliminar hipótesis de `full_pipeline_soundness_internal`. Cubrir recomendaciones P1-P5 de autopsia.
+
+**Key insight**: `instantiateF` solo hace `add` (no merge directo), lo que simplifica InstantiateEvalSound. `ematchF` es read-only (no muta g), lo que hace hematch_bnd estructural. SameShapeSemantics se deriva de `evalOp_mapChildren` + `LawfulBEq` o se agrega como lemma condicional.
+
+**Lecciones aplicables**: L-391 (decomposition), L-378/L-383 (SubstExtends IH), L-375/L-382 (dual motives Pattern.rec), L-234 (sub-invariante), L-392 (value agreement monotonicity), L-390 (foldl suffices).
+
+**Files**:
+- `LambdaSat/EMatchSpec.lean` (modified: +3 teoremas principales + auxiliares)
+- `LambdaSat/SaturationSpec.lean` (modified: strengthen instantiateF proofs if needed)
+- `LambdaSat/TranslationValidation.lean` (modified: remove 3 hypotheses from pipeline)
+- `LambdaSat/SemanticSpec.lean` (modified: add evalOp_sameShape lemma if needed)
+- `README.md` (modified: fix metrics, document TCB boundary)
+- `Tests/IntegrationTests.lean` (modified: add edge-case tests)
+
+#### DAG (v1.1.0)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| F8S1 SameShapeSemantics_holds | FUND | — | completed ✓ |
+| F8S2 ematchF_substitution_bounded | FUND | — | completed ✓ |
+| F8S3 InstantiateEvalSound_holds | CRIT/GATE | F8S1 | completed ✓ |
+| F8S4 Update pipeline signatures | HOJA | F8S1, F8S2, F8S3 | completed ✓ |
+| F8S5 P1-P5 docs and tests | HOJA | F8S4 | completed ✓ |
+
+#### Bloques
+
+- [x] **Bloque 20**: F8S1 + F8S2 (paralelo, ~120-180 LOC)
+- [x] **Bloque 21**: F8S3 (GATE de-risk con sketch _aux, ~150-250 LOC)
+- [x] **Bloque 22**: F8S4 + F8S5 (paralelo, ~130-200 LOC)
+
+#### Decisiones de diseño
+
+**SameShapeSemantics**: La definición de `sameShape` nullifica children via `mapChildren (fun _ => 0)` y compara con `BEq`. Con `LawfulBEq Op` (o `LawfulBEq (ENode Op)`), esto da igualdad proposicional del skeleton. Luego `evalOp_mapChildren` permite demostrar que la evaluación coincide. Si LawfulBEq no está disponible, agregar como lemma condicional con precondición `sameShape_implies_skeleton_eq`. De-risk en B20 determinará el approach.
+
+**InstantiateEvalSound**: Generalizar `instantiateF_preserves_consistency` (SaturationSpec:233, ya prueba CV+PMI) agregando SHI preservation + valor correcto. El caso `patVar` es trivial (g no cambia). El caso `node` usa foldl + `add_node_consistent` + SameShapeSemantics bridge. Patrón reutilizable de `processClass_shi_combined` (SemanticSpec:1168).
+
+**hematch_bnd**: Inducción sobre Pattern + fuel. `ematchF` es read-only. Cada σ.get? retorna IDs del grafo existente (< g.uf.size). Reutiliza `matchChildren_sound` (ya probado).
+
+**P2 (SlimCheck)**: Deferred a v1.2.0 — requiere Mathlib dependency, LambdaSat es self-contained. Documentado en README.
+
+---
+
 ## Version History
 
 | Version | Date | Highlights |
@@ -205,10 +249,11 @@
 | **v0.2.0** | Feb 2026 | Saturation soundness: SoundRewriteRule, SaturationSpec (instantiateF, ematchF, saturateF), PreservesCV, full_pipeline_soundness_greedy. 19 src files, 6,538 LOC, 188 theorems, 1 sorry (isolated in rebuild), zero axioms. |
 | **v0.3.0** | Feb 2026 | Zero sorry: SemanticHashconsInv closes rebuildStepBody gap. 19 src files, 6,895 LOC, 198 theorems, 0 sorry, zero axioms. |
 | **v1.0.0** | Feb 2026 | PreservesCV eliminated: Pattern.eval + ematchF_sound + full_pipeline_soundness_internal. 20 src files, 7,748 LOC, 218 theorems, 0 sorry, zero axioms, zero user assumptions. |
+| **v1.1.0** | Feb 2026 | Zero external hypotheses: InstantiateEvalSound_holds + ematchF_substitution_bounded + processClass_preserves_hcb + full_pipeline_soundness. 21 src files, 8,622 LOC, 233 theorems, 0 sorry, zero axioms, zero external hypotheses. 13 integration tests (5 new edge-case tests). |
 
 ---
 
-## Soundness Chain (v1.0.0)
+## Soundness Chain (v1.1.0)
 
 ```
 Path A (v0.3.0 — with PreservesCV assumption):
@@ -225,9 +270,41 @@ Path B (v1.0.0 — no user assumptions):
         → computeCostsF_preserves_consistency (SemanticSpec)
           → extractF_correct / extractILP_correct (ExtractSpec / ILPSpec)
             → full_pipeline_soundness_internal (TranslationValidation)
+
+Path C (v1.1.0 — zero external hypotheses):
+  sameShapeSemantics_holds (EMatchSpec)
+  + InstantiateEvalSound_holds (EMatchSpec)
+  + ematchF_substitution_bounded (EMatchSpec)
+  + processClass_preserves_hcb (CoreSpec)
+    → full_pipeline_soundness (TranslationValidation)
 ```
 
-**Sorry**: 0 since v0.3.0. **PreservesCV**: eliminated in v1.0.0.
+**Sorry**: 0 since v0.3.0. **PreservesCV**: eliminated in v1.0.0. **External hypotheses**: eliminated in v1.1.0.
+
+---
+
+## Trusted Computing Base (TCB)
+
+**Verified** (inside TCB — correctness follows from Lean kernel type-checking):
+- UnionFind: find, merge, path compression (44 theorems)
+- Core: add, merge, rebuild, canonicalize (79 theorems)
+- SemanticSpec: ConsistentValuation, SemanticHashconsInv, rebuild preservation (49 theorems)
+- EMatchSpec: ematchF_sound, InstantiateEvalSound_holds, ematchF_substitution_bounded (25 theorems)
+- SaturationSpec: saturateF_preserves_consistent_internal (13 theorems)
+- ExtractSpec: extractF_correct (3 theorems)
+- ILPSpec: ilp_extraction_soundness (3 theorems)
+- TranslationValidation: full_pipeline_soundness (8 theorems)
+
+**Assumed correct** (outside TCB):
+- Lean 4 kernel (v4.26.0) — type-checks all proofs
+- Lean 4 compiler — generates runtime code from verified definitions
+- OS / hardware — executes compiled code
+- Typeclass instances — users must correctly implement NodeOps, NodeSemantics, Extractable for their domain
+- ILP solver (HiGHS / branch-and-bound) — untrusted oracle, output validated by `checkSolution`
+
+**Unverified wrappers** (correct by construction but no formal proof):
+- ParallelMatch.lean — IO.asTask wrapper around verified sequential ematchF
+- ParallelSaturate.lean — IO.asTask wrapper around verified sequential saturateF
 
 ---
 

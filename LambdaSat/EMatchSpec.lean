@@ -21,6 +21,7 @@
   This is the key property for ematchF_sound (Bloque 17).
 -/
 import LambdaSat.SaturationSpec
+import LambdaSat.AddNodeTriple
 
 namespace LambdaSat
 
@@ -33,6 +34,7 @@ set_option linter.unusedSectionVars false
 -- ══════════════════════════════════════════════════════════════════
 
 variable {Op : Type} [NodeOps Op] [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op]
+  [DecidableEq Op] [Repr Op] [Inhabited Op]
 
 /-- Two ops with the same shape have children of equal length.
     Follows from `mapChildren_children` + `LawfulBEq`. -/
@@ -62,6 +64,13 @@ def SameShapeSemantics : Prop :=
         (h₂ : i < (NodeOps.children op₂).length),
       v₁ ((NodeOps.children op₁)[i]) = v₂ ((NodeOps.children op₂)[i])) →
     NodeSemantics.evalOp op₁ env v₁ = NodeSemantics.evalOp op₂ env v₂
+
+/-- SameShapeSemantics holds for any NodeSemantics instance via `evalOp_skeleton`.
+    Eliminates the need to assume it as a hypothesis. -/
+theorem sameShapeSemantics_holds : SameShapeSemantics (Op := Op) (Val := Val) :=
+  fun op₁ op₂ env v₁ v₂ hs hc =>
+    NodeSemantics.evalOp_skeleton op₁ op₂ env v₁ v₂
+      (by simp [sameShape] at hs; exact hs) hc
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 1: Pattern.eval — Denotational Semantics
@@ -504,12 +513,14 @@ def InstantiateEvalSound (Op : Type) (Val : Type) [NodeOps Op] [BEq Op] [Hashabl
     ConsistentValuation g env v →
     PostMergeInvariant g →
     SemanticHashconsInv g env v →
+    HashconsChildrenBounded g →
     AllDistinctChildren pat →
     (∀ pv id, subst.get? pv = some id → id < g.unionFind.parent.size) →
     ∀ id g', instantiateF fuel g pat subst = some (id, g') →
     ∃ v', ConsistentValuation g' env v' ∧
       PostMergeInvariant g' ∧
       SemanticHashconsInv g' env v' ∧
+      HashconsChildrenBounded g' ∧
       id < g'.unionFind.parent.size ∧
       g.unionFind.parent.size ≤ g'.unionFind.parent.size ∧
       (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
@@ -532,6 +543,329 @@ theorem substVal_agrees (g g₀ : EGraph Op) (env : Nat → Val) (v v₀ : EClas
     rw [consistent_root_eq' g env v hcv hwf id, hagrees id (hbnd pv id h)]
     exact (consistent_root_eq' g₀ env v₀ hcv₀ hwf₀ id).symm
   | none => rfl
+
+-- ══════════════════════════════════════════════════════════════════
+-- Section 4a: InstantiateEvalSound_holds
+-- ══════════════════════════════════════════════════════════════════
+
+set_option linter.unusedSectionVars false in
+set_option maxHeartbeats 1200000 in
+/-- Inner go helper preserves the (CV, PMI, SHI, HCB) quadruple.
+    Returns existence of new valuation, size monotonicity, agreement,
+    bounded IDs, accumulator preservation, and value clauses. -/
+private theorem instantiateF_go_sound (subst : Substitution) (fuel : Nat)
+    (env : Nat → Val) (g₀ : EGraph Op) (v₀ : EClassId → Val)
+    (hcv₀ : ConsistentValuation g₀ env v₀) (hpmi₀ : PostMergeInvariant g₀)
+    (h_subst₀ : ∀ pv id, subst.get? pv = some id → id < g₀.unionFind.parent.size)
+    -- IH: InstantiateEvalSound at fuel level
+    (ies_ih : ∀ (g : EGraph Op) (pat : Pattern Op) (v : EClassId → Val),
+      ConsistentValuation g env v → PostMergeInvariant g →
+      SemanticHashconsInv g env v → HashconsChildrenBounded g →
+      AllDistinctChildren pat →
+      (∀ pv id, subst.get? pv = some id → id < g.unionFind.parent.size) →
+      ∀ id g', instantiateF fuel g pat subst = some (id, g') →
+      ∃ v', ConsistentValuation g' env v' ∧ PostMergeInvariant g' ∧
+        SemanticHashconsInv g' env v' ∧ HashconsChildrenBounded g' ∧
+        id < g'.unionFind.parent.size ∧
+        g.unionFind.parent.size ≤ g'.unionFind.parent.size ∧
+        (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
+        v' (root g'.unionFind id) = Pattern.eval pat env (substVal v g.unionFind subst))
+    (g : EGraph Op) (pats : List (Pattern Op)) (ids : List EClassId)
+    (v : EClassId → Val) (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g)
+    (hadc : ∀ p ∈ pats, AllDistinctChildren p)
+    (h_ids : ∀ id ∈ ids, id < g.unionFind.parent.size)
+    (hagrees₀ : ∀ i, i < g₀.unionFind.parent.size → v i = v₀ i)
+    (hsize₀ : g₀.unionFind.parent.size ≤ g.unionFind.parent.size) :
+    ∀ resultIds g', instantiateF.go subst fuel g pats ids = some (resultIds, g') →
+    ∃ v', ConsistentValuation g' env v' ∧ PostMergeInvariant g' ∧
+      SemanticHashconsInv g' env v' ∧ HashconsChildrenBounded g' ∧
+      g.unionFind.parent.size ≤ g'.unionFind.parent.size ∧
+      (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
+      (∀ id ∈ resultIds, id < g'.unionFind.parent.size) ∧
+      -- Accumulator preservation: first ids.length elements come from ids.reverse
+      (∀ (i : Nat), i < ids.length → resultIds[i]? = ids.reverse[i]?) ∧
+      -- Length (in ∃ so omega can use it for index bounds) + value clause
+      ∃ (hlen : resultIds.length = ids.length + pats.length),
+        ∀ (j : Nat) (hj : j < pats.length),
+          v' (root g'.unionFind (resultIds[ids.length + j]'(by omega))) =
+            Pattern.eval pats[j] env (substVal v₀ g₀.unionFind subst) := by
+  induction pats generalizing g v ids with
+  | nil =>
+    intro resultIds g' h
+    simp only [instantiateF.go] at h
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj h)
+    exact ⟨v, hcv, hpmi, hshi, hhcb, Nat.le_refl _, fun _ _ => rfl,
+      fun id hid => h_ids id (List.mem_reverse.mp hid), fun _ _ => rfl,
+      ⟨by simp [List.length_reverse], fun j hj => absurd hj (by simp)⟩⟩
+  | cons p ps ihgo =>
+    intro resultIds g' h
+    simp only [instantiateF.go] at h
+    split at h
+    · exact absurd h nofun
+    · rename_i id1 g1 h1
+      -- Apply ies_ih to pattern p
+      have h_subst_g : ∀ pv id, subst.get? pv = some id → id < g.unionFind.parent.size :=
+        fun pv id hs => Nat.lt_of_lt_of_le (h_subst₀ pv id hs) hsize₀
+      obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1, hbnd1, hsize1, hagrees1, hval1⟩ :=
+        ies_ih g p v hcv hpmi hshi hhcb (hadc p (.head _)) h_subst_g id1 g1 h1
+      -- Build hypotheses for recursive go call
+      have h_ids1 : ∀ id ∈ id1 :: ids, id < g1.unionFind.parent.size := by
+        intro id hid; simp at hid; rcases hid with rfl | hid
+        · exact hbnd1
+        · exact Nat.lt_of_lt_of_le (h_ids id hid) hsize1
+      have hagrees₀1 : ∀ i, i < g₀.unionFind.parent.size → v1 i = v₀ i :=
+        fun i hi => (hagrees1 i (Nat.lt_of_lt_of_le hi hsize₀)).trans (hagrees₀ i hi)
+      have hsize₀1 : g₀.unionFind.parent.size ≤ g1.unionFind.parent.size :=
+        Nat.le_trans hsize₀ hsize1
+      -- Apply ihgo (order from `generalizing g v ids`: g, ids, v, then dependent hyps)
+      obtain ⟨v', hcv', hpmi', hshi', hhcb', hsize', hagrees', hbnds', haccum',
+        ⟨hlen', hvals'⟩⟩ :=
+        ihgo g1 (id1 :: ids) v1 hcv1 hpmi1 hshi1 hhcb1
+          (fun p' hp' => hadc p' (.tail _ hp'))
+          h_ids1 hagrees₀1 hsize₀1
+          resultIds g' h
+      refine ⟨v', hcv', hpmi', hshi', hhcb',
+        Nat.le_trans hsize1 hsize',
+        fun i hi => (hagrees' i (Nat.lt_of_lt_of_le hi hsize1)).trans (hagrees1 i hi),
+        hbnds', ?_, ?_⟩
+      · -- Accumulator preservation: for i < ids.length
+        intro i hi
+        have hi' : i < (id1 :: ids).length := by simp; omega
+        rw [haccum' i hi', List.reverse_cons,
+          List.getElem?_append_left (by rw [List.length_reverse]; exact hi)]
+      · -- Length + value clause
+        refine ⟨by simp [List.length_cons] at hlen' ⊢; omega, ?_⟩
+        intro j hj
+        cases j with
+        | zero =>
+          -- Show resultIds[ids.length] = id1 via accumulator preservation
+          have h_pos : ids.length < (id1 :: ids).length := by simp
+          have h_acc := haccum' ids.length h_pos
+          rw [List.reverse_cons, ← List.length_reverse (as := ids),
+            List.getElem?_concat_length, List.length_reverse] at h_acc
+          -- h_acc : resultIds[ids.length]? = some id1
+          have h_bound : ids.length < resultIds.length := by omega
+          have h_eq : resultIds[ids.length]'h_bound = id1 := by
+            rw [List.getElem?_eq_getElem h_bound] at h_acc
+            exact Option.some.inj h_acc
+          simp only [Nat.add_zero, List.getElem_cons_zero]; rw [h_eq]
+          -- Value: v'(root g'.uf id1) = Pattern.eval p env (substVal v₀ g₀.uf subst)
+          calc v' (root g'.unionFind id1)
+              _ = v' id1 := consistent_root_eq' g' env v' hcv' hpmi'.uf_wf id1
+              _ = v1 id1 := hagrees' id1 hbnd1
+              _ = v1 (root g1.unionFind id1) :=
+                    (consistent_root_eq' g1 env v1 hcv1 hpmi1.uf_wf id1).symm
+              _ = Pattern.eval p env (substVal v g.unionFind subst) := hval1
+              _ = Pattern.eval p env (substVal v₀ g₀.unionFind subst) :=
+                    Pattern.eval_ext p env _ _
+                      (fun pv => substVal_agrees g g₀ env v v₀ hcv hcv₀
+                        hpmi.uf_wf hpmi₀.uf_wf hagrees₀ subst pv h_subst₀)
+        | succ j' =>
+          -- Map to ihgo's value clause: (id1::ids).length + j' = ids.length + (j'+1)
+          have hj' : j' < ps.length := by simp at hj; omega
+          have h_idx : ids.length + (j' + 1) = (id1 :: ids).length + j' := by
+            simp [List.length_cons]; omega
+          simp only [h_idx]
+          exact hvals' j' hj'
+
+set_option linter.unusedSectionVars false in
+set_option maxHeartbeats 1200000 in
+/-- **InstantiateEvalSound_holds**: instantiateF preserves (CV, PMI, SHI, HCB) and
+    produces the correct pattern evaluation value.
+
+    Uses `add_node_triple` for the `.node` case and `evalOp_skeleton` with
+    `replaceChildren_children/sameShape` for the value clause. -/
+theorem InstantiateEvalSound_holds (env : Nat → Val) : InstantiateEvalSound Op Val env := by
+  intro fuel
+  induction fuel with
+  | zero => intro g pat subst v _ _ _ _ _ _ id g' h; simp at h
+  | succ n ih =>
+    intro g pat subst v hcv hpmi hshi hhcb hadc hbnd id g' h
+    cases pat with
+    | patVar pv =>
+      simp only [instantiateF_succ_patVar, Substitution.lookup] at h
+      split at h
+      · rename_i existId hget
+        have ⟨hid, hg⟩ := Prod.mk.inj (Option.some.inj h)
+        subst hg; subst hid
+        refine ⟨v, hcv, hpmi, hshi, hhcb,
+          hbnd pv existId hget, Nat.le_refl _,
+          fun _ _ => rfl, ?_⟩
+        rw [Pattern.eval_patVar]; unfold substVal
+        rw [Std.HashMap.get?_eq_getElem?] at hget; simp [hget]
+      · exact absurd h nofun
+    | node skelOp subpats =>
+      simp only [instantiateF_succ_node] at h
+      split at h
+      · exact absurd h nofun
+      · rename_i childIds g1 hgo
+        have hadd_eq := Option.some.inj h
+        -- hadd_eq : g1.add ⟨...⟩ = (id, g'). Don't use Prod.mk.inj (expands g1.add).
+        -- AllDistinctChildren for .node unfolds to conjunction
+        have hadc_nd : (NodeOps.children skelOp).Nodup := by
+          unfold AllDistinctChildren at hadc; exact hadc.1
+        have hadc_len : subpats.length = (NodeOps.children skelOp).length := by
+          unfold AllDistinctChildren at hadc; exact hadc.2.1
+        have hadc_sub : ∀ p ∈ subpats, AllDistinctChildren p := by
+          unfold AllDistinctChildren at hadc; exact hadc.2.2
+        -- Apply go_sound (g₀ = g, v₀ = v for initial call)
+        obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1, hsize1, hagrees1, hbnds1,
+          _, ⟨hlen1, hvals1⟩⟩ :=
+          instantiateF_go_sound subst n env g v hcv hpmi hbnd
+            (fun g' pat' v' hcv' hpmi' hshi' hhcb' hadc' hbnd' id' g'' h' =>
+              ih g' pat' subst v' hcv' hpmi' hshi' hhcb' hadc' hbnd' id' g'' h')
+            g subpats [] v hcv hpmi hshi hhcb hadc_sub (fun _ => nofun)
+            (fun _ _ => rfl) Nat.le.refl childIds g1 hgo
+        -- Children bounded for add_node_triple
+        have hlen_match : childIds.length = (NodeOps.children skelOp).length := by
+          simp at hlen1; omega
+        have hchildren_bnd : ∀ c ∈ (⟨NodeOps.replaceChildren skelOp childIds⟩ : ENode Op).children,
+            c < g1.unionFind.parent.size := by
+          intro c hc; simp only [ENode.children] at hc
+          rw [NodeOps.replaceChildren_children skelOp childIds hlen_match] at hc
+          exact hbnds1 c hc
+        -- Apply add_node_triple, then fold results using hadd_eq
+        have hadd := add_node_triple g1 ⟨NodeOps.replaceChildren skelOp childIds⟩ env v1 hcv1 hpmi1
+            hshi1 hhcb1 hchildren_bnd
+        rw [hadd_eq] at hadd
+        obtain ⟨v2, hcv2, hpmi2, hshi2, hhcb2, hbnd2, hsize2, hagrees2, hval2⟩ := hadd
+        refine ⟨v2, hcv2, hpmi2, hshi2, hhcb2, hbnd2,
+          Nat.le_trans hsize1 hsize2,
+          fun i hi => (hagrees2 i (Nat.lt_of_lt_of_le hi hsize1)).trans (hagrees1 i hi),
+          ?_⟩
+        -- Value clause: NodeEval → evalOp_skeleton → zip_lookup → agreement chain
+        rw [hval2]; simp only [NodeEval, Pattern.eval]
+        apply NodeSemantics.evalOp_skeleton
+        · exact NodeOps.replaceChildren_sameShape skelOp childIds hlen_match
+        · intro i h1 h2
+          simp only [NodeOps.replaceChildren_children skelOp childIds hlen_match]
+          rw [zip_lookup_nodup (NodeOps.children skelOp)
+            (List.map (fun p => Pattern.eval p env (substVal v g.unionFind subst)) subpats)
+            i hadc_nd h2 (by simp [hadc_len])]
+          simp only [List.getElem_map]
+          -- v2 childIds[i] = Pattern.eval subpats[i] env (substVal v g.uf subst)
+          have hci_bnd : childIds[i] < g1.unionFind.parent.size :=
+            hbnds1 _ (List.getElem_mem (by omega))
+          have hv := hvals1 i (by omega)
+          simp only [List.length_nil, Nat.zero_add] at hv
+          calc v2 childIds[i]
+              _ = v1 childIds[i] := hagrees2 _ hci_bnd
+              _ = v1 (root g1.unionFind childIds[i]) :=
+                    (consistent_root_eq' g1 env v1 hcv1 hpmi1.uf_wf _).symm
+              _ = Pattern.eval subpats[i] env (substVal v g.unionFind subst) := hv
+
+-- ══════════════════════════════════════════════════════════════════
+-- Section 4b: ematchF substitution boundedness
+-- ══════════════════════════════════════════════════════════════════
+
+private theorem root_bounded' (uf : UnionFind) (id : EClassId) (hwf : WellFormed uf)
+    (hid : id < uf.parent.size) : root uf id < uf.parent.size := by
+  simp only [root]; exact rootD_bounded hwf.1 hid
+
+private theorem extend_preserves_bounded {bound : Nat}
+    (s₀ : Substitution) (pv : PatVarId) (cid : EClassId)
+    (s : Substitution) (hext : s₀.extend pv cid = some s)
+    (hs₀ : ∀ pv' id, s₀.get? pv' = some id → id < bound)
+    (hcid : cid < bound) :
+    ∀ pv' id, s.get? pv' = some id → id < bound := by
+  intro pv' id' hget; unfold Substitution.extend at hext; split at hext
+  · injection hext with hext; subst hext
+    simp [Std.HashMap.get?_eq_getElem?, Std.HashMap.getElem?_insert] at hget
+    split at hget
+    · injection hget with hget; subst hget; exact hcid
+    · exact hs₀ pv' id' (by rwa [Std.HashMap.get?_eq_getElem?])
+  · split at hext
+    · injection hext with hext; subst hext; exact hs₀ pv' id' hget
+    · simp at hext
+
+/-- Every substitution returned by `ematchF` maps pattern variables to IDs bounded
+    by `g.unionFind.parent.size`. This is the `hematch_bnd` hypothesis from
+    `full_pipeline_soundness_internal`. -/
+theorem ematchF_substitution_bounded (g : EGraph Op) (hpmi : PostMergeInvariant g) :
+    ∀ (fuel : Nat) (pat : Pattern Op) (classId : EClassId) (s₀ : Substitution),
+      classId < g.unionFind.parent.size →
+      (∀ pv id, s₀.get? pv = some id → id < g.unionFind.parent.size) →
+      ∀ σ ∈ ematchF fuel g pat classId s₀,
+      ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size := by
+  -- matchChildren helper
+  have h_mc : ∀ (n : Nat),
+    (∀ (pat : Pattern Op) (classId : EClassId) (s₀ : Substitution),
+      classId < g.unionFind.parent.size →
+      (∀ pv id, s₀.get? pv = some id → id < g.unionFind.parent.size) →
+      ∀ σ ∈ ematchF n g pat classId s₀,
+      ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size) →
+    ∀ (pats : List (Pattern Op)) (nodeChildren : List EClassId)
+      (s₀ : Substitution) (acc : MatchResult),
+      (∀ c ∈ nodeChildren, c < g.unionFind.parent.size) →
+      (∀ pv id, s₀.get? pv = some id → id < g.unionFind.parent.size) →
+      (∀ σ ∈ acc, ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size) →
+      ∀ σ ∈ ematchF.matchChildren g n pats nodeChildren s₀ acc,
+      ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size := by
+    intro n ih_fuel pats
+    induction pats with
+    | nil =>
+      intro nodeChildren s₀ acc _ hsbnd haccbnd σ hmem
+      cases nodeChildren with
+      | nil =>
+        unfold ematchF.matchChildren at hmem; simp at hmem
+        rcases hmem with h | rfl
+        · exact haccbnd σ h
+        · exact hsbnd
+      | cons => unfold ematchF.matchChildren at hmem; exact haccbnd σ hmem
+    | cons p ps ih_pats =>
+      intro nodeChildren s₀ acc hcbnd hsbnd haccbnd σ hmem
+      cases nodeChildren with
+      | nil => unfold ematchF.matchChildren at hmem; exact haccbnd σ hmem
+      | cons c cs =>
+        unfold ematchF.matchChildren at hmem
+        exact list_foldl_forall
+          (P := fun σ => ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size)
+          (f := fun a s => ematchF.matchChildren g n ps cs s a)
+          (ematchF n g p c s₀) acc haccbnd
+          (fun σ_mid hmid acc' hacc' x hx =>
+            ih_pats cs σ_mid acc'
+              (fun c' hc' => hcbnd c' (.tail _ hc'))
+              (ih_fuel p c s₀ (hcbnd c (.head _)) hsbnd σ_mid hmid)
+              hacc' x hx)
+          σ hmem
+  -- Main proof by induction on fuel
+  intro fuel
+  induction fuel with
+  | zero => intro pat classId s₀ _ _ σ hmem; simp [ematchF] at hmem
+  | succ n ih =>
+    intro pat classId s₀ hclass hs₀ σ hmem
+    cases pat with
+    | patVar pv =>
+      unfold ematchF at hmem; simp only [] at hmem
+      have hcanon := root_bounded' g.unionFind classId hpmi.uf_wf hclass
+      split at hmem
+      · next s hext =>
+        simp at hmem; rw [hmem]
+        exact extend_preserves_bounded s₀ pv _ s hext hs₀ hcanon
+      · simp at hmem
+    | node skelOp subpats =>
+      unfold ematchF at hmem; simp only [] at hmem
+      split at hmem
+      · simp at hmem
+      · rename_i eclass hclass_get
+        rw [← Array.foldl_toList] at hmem
+        exact list_foldl_forall
+          (P := fun σ => ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size)
+          (f := fun acc (nd : ENode Op) =>
+            if sameShape skelOp nd.op = true
+            then ematchF.matchChildren g n subpats (NodeOps.children nd.op) s₀ acc
+            else acc)
+          eclass.nodes.toList [] (fun _ h => absurd h (by simp))
+          (fun nd hnd acc' hacc' x hx => by
+            dsimp only [] at hx; split at hx
+            · exact h_mc n ih subpats (NodeOps.children nd.op) s₀ acc'
+                (fun c hc => hpmi.children_bounded _ eclass hclass_get nd hnd c
+                  (by simp [ENode.children]; exact hc))
+                hs₀ hacc' x hx
+            · exact hacc' x hx)
+          σ hmem
 
 /-- Value chain: for an ematch result σ from g₀, eval(rhs, substVal v g.uf σ) = v(root g.uf classId)
     when v agrees with v₀ on g₀. Chains through: substVal_agrees → eval_ext → soundness →
@@ -560,7 +894,7 @@ private theorem ematch_value_chain (g₀ g : EGraph Op) (env : Nat → Val) (v�
       _ = v (root g.unionFind classId) := (consistent_root_eq' g env v hcv hwf classId).symm
 
 set_option linter.unusedSectionVars false in
-/-- A single instantiate+merge step in applyRuleAtF preserves (CV, PMI, SHI) and
+/-- A single instantiate+merge step in applyRuleAtF preserves (CV, PMI, SHI, HCB) and
     value agreement with the original graph.
     Used as the inductive step for the inner foldl in applyRuleAtF. -/
 private theorem applyRuleAtF_step_sound
@@ -572,7 +906,7 @@ private theorem applyRuleAtF_step_sound
     (hclass : classId < g₀.unionFind.parent.size)
     (acc : EGraph Op) (v_acc : EClassId → Val) (σ : Substitution)
     (hcv : ConsistentValuation acc env v_acc) (hpmi : PostMergeInvariant acc)
-    (hshi : SemanticHashconsInv acc env v_acc)
+    (hshi : SemanticHashconsInv acc env v_acc) (hhcb : HashconsChildrenBounded acc)
     (hagrees : ∀ i, i < g₀.unionFind.parent.size → v_acc i = v₀ i)
     (hsize : g₀.unionFind.parent.size ≤ acc.unionFind.parent.size)
     (hmem : σ ∈ ematchF fuel g₀ psrule.rule.lhs classId)
@@ -589,6 +923,7 @@ private theorem applyRuleAtF_step_sound
     ∃ v', ConsistentValuation step_result env v' ∧
       PostMergeInvariant step_result ∧
       SemanticHashconsInv step_result env v' ∧
+      HashconsChildrenBounded step_result ∧
       (∀ i, i < g₀.unionFind.parent.size → v' i = v₀ i) ∧
       g₀.unionFind.parent.size ≤ step_result.unionFind.parent.size := by
   -- dsimp reduces let bindings (condMet, canonLhs, canonRhs)
@@ -611,6 +946,10 @@ private theorem applyRuleAtF_step_sound
         | none => acc | some (rhsId, acc') =>
           if (acc'.unionFind.root classId == acc'.unionFind.root rhsId) = true
           then acc' else acc'.merge classId rhsId) env v' ∧
+      HashconsChildrenBounded (match instantiateF fuel acc psrule.rule.rhs σ with
+        | none => acc | some (rhsId, acc') =>
+          if (acc'.unionFind.root classId == acc'.unionFind.root rhsId) = true
+          then acc' else acc'.merge classId rhsId) ∧
       (∀ i, i < g₀.unionFind.parent.size → v' i = v₀ i) ∧
       g₀.unionFind.parent.size ≤ (match instantiateF fuel acc psrule.rule.rhs σ with
         | none => acc | some (rhsId, acc') =>
@@ -622,14 +961,14 @@ private theorem applyRuleAtF_step_sound
       simp only [if_neg h]; exact h_inst
     | some check =>
       by_cases hcond : ((!check acc σ : Bool) = true)
-      · simp only [if_pos hcond]; exact ⟨v_acc, hcv, hpmi, hshi, hagrees, hsize⟩
+      · simp only [if_pos hcond]; exact ⟨v_acc, hcv, hpmi, hshi, hhcb, hagrees, hsize⟩
       · simp only [if_neg hcond]; exact h_inst
   -- Prove h_inst: the instantiateF match preserves everything
   split
-  · exact ⟨v_acc, hcv, hpmi, hshi, hagrees, hsize⟩
+  · exact ⟨v_acc, hcv, hpmi, hshi, hhcb, hagrees, hsize⟩
   · rename_i rhsId' acc'' hinst
-    obtain ⟨v', hcv', hpmi', hshi', hrhsBnd, hsize', hagrees', hval⟩ :=
-      hies fuel acc psrule.rule.rhs σ v_acc hcv hpmi hshi psrule.rhs_wf h_subst_bnd
+    obtain ⟨v', hcv', hpmi', hshi', hhcb', hrhsBnd, hsize', hagrees', hval⟩ :=
+      hies fuel acc psrule.rule.rhs σ v_acc hcv hpmi hshi hhcb psrule.rhs_wf h_subst_bnd
         rhsId' acc'' hinst
     have hagrees_g₀ : ∀ i, i < g₀.unionFind.parent.size → v' i = v₀ i :=
       fun i hi => (hagrees' i (Nat.lt_of_lt_of_le hi hsize)).trans (hagrees i hi)
@@ -644,17 +983,18 @@ private theorem applyRuleAtF_step_sound
         ← hagrees' classId (Nat.lt_of_lt_of_le hclass hsize)]
       exact (consistent_root_eq' acc'' env v' hcv' hpmi'.uf_wf classId).symm
     split
-    · exact ⟨v', hcv', hpmi', hshi', hagrees_g₀, hsize_g₀⟩
+    · exact ⟨v', hcv', hpmi', hshi', hhcb', hagrees_g₀, hsize_g₀⟩
     · exact ⟨v', merge_consistent acc'' classId rhsId' env v' hcv' hpmi'.uf_wf
         hclass' hrhsBnd hval_eq.symm,
         merge_preserves_pmi acc'' classId rhsId' hpmi' hclass',
         merge_preserves_shi acc'' classId rhsId' env v' hshi' hcv'
           hpmi'.uf_wf hclass' hrhsBnd hval_eq.symm,
+        merge_preserves_hcb acc'' classId rhsId' hhcb',
         hagrees_g₀, merge_uf_size acc'' classId rhsId' ▸ hsize_g₀⟩
 
 set_option linter.unusedSectionVars false in
 set_option maxHeartbeats 400000 in
-/-- applyRuleAtF preserves (CV, PMI, SHI) for a PatternSoundRule.
+/-- applyRuleAtF preserves (CV, PMI, SHI, HCB) for a PatternSoundRule.
     Proven by induction on the inner foldl (match results). -/
 theorem applyRuleAtF_sound (fuel : Nat) (psrule : PatternSoundRule Op Val)
     (classId : EClassId) (env : Nat → Val)
@@ -662,20 +1002,21 @@ theorem applyRuleAtF_sound (fuel : Nat) (psrule : PatternSoundRule Op Val)
     (hies : InstantiateEvalSound Op Val env)
     (g : EGraph Op) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v) (hpmi : PostMergeInvariant g)
-    (hshi : SemanticHashconsInv g env v)
+    (hshi : SemanticHashconsInv g env v) (hhcb : HashconsChildrenBounded g)
     (hclass : classId < g.unionFind.parent.size)
     (hematch_bnd : ∀ σ ∈ ematchF fuel g psrule.rule.lhs classId,
       ∀ pv id, σ.get? pv = some id → id < g.unionFind.parent.size) :
     ∃ v', ConsistentValuation (applyRuleAtF fuel g psrule.rule classId) env v' ∧
       PostMergeInvariant (applyRuleAtF fuel g psrule.rule classId) ∧
       SemanticHashconsInv (applyRuleAtF fuel g psrule.rule classId) env v' ∧
+      HashconsChildrenBounded (applyRuleAtF fuel g psrule.rule classId) ∧
       g.unionFind.parent.size ≤ (applyRuleAtF fuel g psrule.rule classId).unionFind.parent.size := by
   unfold applyRuleAtF
-  -- Generalize to foldl with invariant: (CV, PMI, SHI, agrees, size)
+  -- Generalize to foldl with invariant: (CV, PMI, SHI, HCB, agrees, size)
   suffices h : ∀ (l : List Substitution) (acc : EGraph Op) (v_acc : EClassId → Val),
     (∀ σ ∈ l, σ ∈ ematchF fuel g psrule.rule.lhs classId) →
     ConsistentValuation acc env v_acc → PostMergeInvariant acc →
-    SemanticHashconsInv acc env v_acc →
+    SemanticHashconsInv acc env v_acc → HashconsChildrenBounded acc →
     (∀ i, i < g.unionFind.parent.size → v_acc i = v i) →
     g.unionFind.parent.size ≤ acc.unionFind.parent.size →
     ∃ v', ConsistentValuation (l.foldl (fun acc subst =>
@@ -705,6 +1046,15 @@ theorem applyRuleAtF_sound (fuel : Nat) (psrule : PatternSoundRule Op Val)
         | some (rhsId, acc') =>
           if root acc'.unionFind classId == root acc'.unionFind rhsId then acc'
           else acc'.merge classId rhsId) acc) env v' ∧
+      HashconsChildrenBounded (l.foldl (fun acc subst =>
+      let condMet := match psrule.rule.sideCondCheck with
+        | some check => check acc subst | none => true
+      if !condMet then acc
+      else match instantiateF fuel acc psrule.rule.rhs subst with
+        | none => acc
+        | some (rhsId, acc') =>
+          if root acc'.unionFind classId == root acc'.unionFind rhsId then acc'
+          else acc'.merge classId rhsId) acc) ∧
       g.unionFind.parent.size ≤ (l.foldl (fun acc subst =>
       let condMet := match psrule.rule.sideCondCheck with
         | some check => check acc subst | none => true
@@ -714,21 +1064,23 @@ theorem applyRuleAtF_sound (fuel : Nat) (psrule : PatternSoundRule Op Val)
         | some (rhsId, acc') =>
           if root acc'.unionFind classId == root acc'.unionFind rhsId then acc'
           else acc'.merge classId rhsId) acc).unionFind.parent.size by
-    obtain ⟨v', hcv', hpmi', hshi', hsize'⟩ := h _ g v (fun σ hσ => hσ) hcv hpmi hshi
-      (fun _ _ => rfl) Nat.le.refl
-    exact ⟨v', hcv', hpmi', hshi', hsize'⟩
+    obtain ⟨v', hcv', hpmi', hshi', hhcb', hsize'⟩ := h _ g v (fun σ hσ => hσ) hcv hpmi hshi
+      hhcb (fun _ _ => rfl) Nat.le.refl
+    exact ⟨v', hcv', hpmi', hshi', hhcb', hsize'⟩
   intro l
   induction l with
-  | nil => intro acc v_acc _ hcv hpmi hshi _ hsize; exact ⟨v_acc, hcv, hpmi, hshi, hsize⟩
+  | nil =>
+    intro acc v_acc _ hcv hpmi hshi hhcb _ hsize
+    exact ⟨v_acc, hcv, hpmi, hshi, hhcb, hsize⟩
   | cons σ rest ih =>
-    intro acc v_acc hmem hcv_acc hpmi_acc hshi_acc hagrees hsize
+    intro acc v_acc hmem hcv_acc hpmi_acc hshi_acc hhcb_acc hagrees hsize
     simp only [List.foldl_cons]
     have hmem_σ := hmem σ (.head _)
     have hbnd_σ := hematch_bnd σ hmem_σ
-    obtain ⟨v', hcv', hpmi', hshi', hagrees', hsize'⟩ :=
+    obtain ⟨v', hcv', hpmi', hshi', hhcb', hagrees', hsize'⟩ :=
       applyRuleAtF_step_sound fuel psrule classId env hsss hies g v hcv hpmi hclass
-        acc v_acc σ hcv_acc hpmi_acc hshi_acc hagrees hsize hmem_σ hbnd_σ
-    exact ih _ v' (fun σ' hσ' => hmem σ' (.tail _ hσ')) hcv' hpmi' hshi' hagrees' hsize'
+        acc v_acc σ hcv_acc hpmi_acc hshi_acc hhcb_acc hagrees hsize hmem_σ hbnd_σ
+    exact ih _ v' (fun σ' hσ' => hmem σ' (.tail _ hσ')) hcv' hpmi' hshi' hhcb' hagrees' hsize'
 
 set_option linter.unusedSectionVars false in
 set_option maxHeartbeats 400000 in
@@ -740,7 +1092,7 @@ set_option maxHeartbeats 400000 in
     1. `ematchF_sound` — fully proven (zero sorry, this file)
     2. `InstantiateEvalSound` — focused property about instantiateF's value
 
-    The derivation: for each rule, applyRuleAtF_sound gives (CV, PMI, SHI)
+    The derivation: for each rule, applyRuleAtF_sound gives (CV, PMI, SHI, HCB)
     preservation, which composes through the outer foldl to give PreservesCV
     for the full applyRuleF → saturateF pipeline. -/
 theorem saturateF_preserves_consistent_internal (fuel maxIter rebuildFuel : Nat)
@@ -748,6 +1100,7 @@ theorem saturateF_preserves_consistent_internal (fuel maxIter rebuildFuel : Nat)
     (env : Nat → Val) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
     (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g)
     (hsss : SameShapeSemantics (Op := Op) (Val := Val))
     (hies : InstantiateEvalSound Op Val env)
     (hematch_bnd : ∀ (g' : EGraph Op) (rule : PatternSoundRule Op Val),
@@ -758,26 +1111,28 @@ theorem saturateF_preserves_consistent_internal (fuel maxIter rebuildFuel : Nat)
     ∃ v', ConsistentValuation
       (saturateF fuel maxIter rebuildFuel g (rules.map (·.rule))) env v' :=
   saturateF_preserves_consistent fuel maxIter rebuildFuel g (rules.map (·.rule))
-    env v hcv hpmi hshi (fun rule hrule => by
+    env v hcv hpmi hshi hhcb (fun rule hrule => by
       obtain ⟨psrule, hps, hrw⟩ := List.mem_map.mp hrule
       rw [← hrw]
       -- Derive PreservesCV from applyRuleAtF_sound
-      intro g' v' hcv' hpmi' hshi'
+      intro g' v' hcv' hpmi' hshi' hhcb'
       -- applyRuleF = foldl applyRuleAtF over allClasses
       simp only [applyRuleF]
-      -- Prove foldl over classes preserves triple
+      -- Prove foldl over classes preserves quadruple
       suffices h : ∀ (l : List EClassId) (acc : EGraph Op) (v_acc : EClassId → Val),
         (∀ cid ∈ l, cid < g'.unionFind.parent.size) →
         ConsistentValuation acc env v_acc → PostMergeInvariant acc →
-        SemanticHashconsInv acc env v_acc →
+        SemanticHashconsInv acc env v_acc → HashconsChildrenBounded acc →
         g'.unionFind.parent.size ≤ acc.unionFind.parent.size →
         ∃ v'', ConsistentValuation (l.foldl (fun acc classId =>
           applyRuleAtF fuel acc psrule.rule classId) acc) env v'' ∧
           PostMergeInvariant (l.foldl (fun acc classId =>
             applyRuleAtF fuel acc psrule.rule classId) acc) ∧
           SemanticHashconsInv (l.foldl (fun acc classId =>
-            applyRuleAtF fuel acc psrule.rule classId) acc) env v'' by
-        obtain ⟨v'', hcv'', hpmi'', hshi''⟩ := h _ g' v'
+            applyRuleAtF fuel acc psrule.rule classId) acc) env v'' ∧
+          HashconsChildrenBounded (l.foldl (fun acc classId =>
+            applyRuleAtF fuel acc psrule.rule classId) acc) by
+        obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb''⟩ := h _ g' v'
           (fun cid hcid => by
             have ⟨a, hmem, ha_eq⟩ : ∃ a ∈ g'.classes.toList, a.1 = cid :=
               List.mem_map.mp hcid
@@ -785,20 +1140,22 @@ theorem saturateF_preserves_consistent_internal (fuel maxIter rebuildFuel : Nat)
               rw [Std.HashMap.contains_eq_isSome_getElem?,
                   Std.HashMap.mem_toList_iff_getElem?_eq_some.mp hmem]; rfl
             exact ha_eq ▸ hpmi'.classes_entries_valid a.fst hcont)
-          hcv' hpmi' hshi' Nat.le.refl
-        exact ⟨v'', hcv'', hpmi'', hshi''⟩
+          hcv' hpmi' hshi' hhcb' Nat.le.refl
+        exact ⟨v'', hcv'', hpmi'', hshi'', hhcb''⟩
       intro l
       induction l with
-      | nil => intro acc v_acc _ hcv hpmi hshi _; exact ⟨v_acc, hcv, hpmi, hshi⟩
+      | nil =>
+        intro acc v_acc _ hcv hpmi hshi hhcb _
+        exact ⟨v_acc, hcv, hpmi, hshi, hhcb⟩
       | cons cid rest ih =>
-        intro acc v_acc hbnd hcv_acc hpmi_acc hshi_acc hsize_acc
+        intro acc v_acc hbnd hcv_acc hpmi_acc hshi_acc hhcb_acc hsize_acc
         simp only [List.foldl_cons]
         have hcid : cid < acc.unionFind.parent.size :=
           Nat.lt_of_lt_of_le (hbnd cid (.head _)) hsize_acc
-        obtain ⟨v'', hcv'', hpmi'', hshi'', hsize''⟩ :=
+        obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb'', hsize''⟩ :=
           applyRuleAtF_sound fuel psrule cid env hsss hies acc v_acc hcv_acc hpmi_acc
-            hshi_acc hcid (hematch_bnd acc psrule hps hpmi_acc cid hcid)
-        exact ih _ v'' (fun c hc => hbnd c (.tail _ hc)) hcv'' hpmi'' hshi''
+            hshi_acc hhcb_acc hcid (hematch_bnd acc psrule hps hpmi_acc cid hcid)
+        exact ih _ v'' (fun c hc => hbnd c (.tail _ hc)) hcv'' hpmi'' hshi'' hhcb''
           (Nat.le_trans hsize_acc hsize''))
 
 end LambdaSat

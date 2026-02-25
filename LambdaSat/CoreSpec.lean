@@ -47,6 +47,11 @@ def ChildrenBounded (eg : EGraph Op) : Prop :=
     ∀ node, node ∈ cls.nodes.toList →
       ∀ child, child ∈ node.children → child < eg.unionFind.parent.size
 
+/-- HashconsChildrenBounded: all children of hashcons entries are bounded by UF size. -/
+def HashconsChildrenBounded (eg : EGraph Op) : Prop :=
+  ∀ nd : ENode Op, ∀ id : EClassId, eg.hashcons.get? nd = some id →
+    ∀ c ∈ nd.children, c < eg.unionFind.parent.size
+
 structure EGraphWF (eg : EGraph Op) : Prop where
   uf_wf : WellFormed eg.unionFind
   hashcons_consistent : HashconsConsistent eg
@@ -1186,6 +1191,83 @@ theorem canonicalize_output_bounded (g : EGraph Op) (node : ENode Op)
     rcases List.mem_map.mp hmem with ⟨c, hc_mem, hc_eq⟩
     subst hc_eq
     exact lookup_bounded _ _ hpairs c (hbnd c hc_mem)
+
+/-- processClass preserves HashconsChildrenBounded.
+    processClass only modifies hashcons entries (erase old + insert canonical).
+    Canonicalized nodes have bounded children via canonicalize_output_bounded. -/
+theorem processClass_preserves_hcb (g : EGraph Op) (classId : EClassId)
+    (hpmi : PostMergeInvariant g) (hhcb : HashconsChildrenBounded g) :
+    HashconsChildrenBounded (g.processClass classId).1 := by
+  -- Step 1: Convert HCB goal to compound invariant with g.unionFind.parent.size
+  have hsz := processClass_uf_size g classId
+  suffices h : ∀ nd id, (g.processClass classId).1.hashcons.get? nd = some id →
+      ∀ c ∈ nd.children, c < g.unionFind.parent.size by
+    intro nd id hget c hc; rw [hsz]; exact h nd id hget c hc
+  -- Step 2: Unfold processClass, intro quantifiers, then show with Prod eta
+  unfold EGraph.processClass
+  intro nd id
+  show (match (g.find classId).2.classes.get? (g.find classId).1 with
+    | none => ((g.find classId).2, [])
+    | some eclass => _).1.hashcons.get? nd = some id →
+    ∀ c ∈ nd.children, c < g.unionFind.parent.size
+  rw [egraph_find_classes]
+  split
+  · -- none: graph hashcons = g.hashcons (by egraph_find_hashcons, rfl)
+    intro hget c hc; exact hhcb nd id hget c hc
+  · -- some eclass: foldl over nodes; prove compound invariant, extract .1 nd id
+    rename_i eclass heclass
+    exact (@Array.foldl_induction (ENode Op) (EGraph Op × List (EClassId × EClassId))
+      eclass.nodes
+      (fun _ (p : EGraph Op × List (EClassId × EClassId)) =>
+        (∀ nd id, p.1.hashcons.get? nd = some id →
+          ∀ c ∈ nd.children, c < g.unionFind.parent.size) ∧
+        WellFormed p.1.unionFind ∧
+        p.1.unionFind.parent.size = g.unionFind.parent.size)
+      ((g.find classId).2, [])
+      ⟨fun nd id hget c hc => hhcb nd id hget c hc,
+       egraph_find_uf_wf g classId hpmi.uf_wf,
+       egraph_find_uf_size g classId⟩
+      _
+      (fun ⟨i, hi⟩ ⟨acc, merges⟩ ⟨ih_hcb, ih_wf, ih_sz⟩ => by
+        dsimp only
+        have acc1_wf := canonicalize_uf_wf acc eclass.nodes[i] ih_wf
+        have acc1_hcs := canonicalize_hashcons acc eclass.nodes[i]
+        have acc1_sz : (acc.canonicalize eclass.nodes[i]).2.unionFind.parent.size =
+            g.unionFind.parent.size := by
+          rw [canonicalize_uf_size]; exact ih_sz
+        have acc1_hcb_g : ∀ nd id,
+            (acc.canonicalize eclass.nodes[i]).2.hashcons.get? nd = some id →
+            ∀ c ∈ nd.children, c < g.unionFind.parent.size := by
+          intro nd id hget c hc; rw [acc1_hcs] at hget; exact ih_hcb nd id hget c hc
+        have h_nd_bnd : ∀ c ∈ eclass.nodes[i].children, c < g.unionFind.parent.size :=
+          hpmi.children_bounded _ _ heclass _ (Array.getElem_mem_toList hi)
+        have h_canon_bnd : ∀ c, c ∈ (acc.canonicalize eclass.nodes[i]).1.children →
+            c < g.unionFind.parent.size := by
+          intro c hc
+          have h1 := canonicalize_output_bounded acc eclass.nodes[i] ih_wf
+            (fun c hc => by rw [ih_sz]; exact h_nd_bnd c hc) c hc
+          rw [← ih_sz]; exact h1
+        split
+        · exact ⟨acc1_hcb_g, acc1_wf, acc1_sz⟩
+        · have h_erase : ∀ nd id,
+              ((acc.canonicalize eclass.nodes[i]).2.hashcons.erase eclass.nodes[i]).get? nd =
+                some id → ∀ c ∈ nd.children, c < g.unionFind.parent.size := by
+            intro nd id hget c hc
+            by_cases hnn : eclass.nodes[i] = nd
+            · subst hnn; rw [hashcons_get?_erase_self] at hget; exact nomatch hget
+            · rw [hashcons_get?_erase_ne _ _ _ hnn] at hget; exact acc1_hcb_g nd id hget c hc
+          have h_insert : ∀ nd id,
+              (((acc.canonicalize eclass.nodes[i]).2.hashcons.erase eclass.nodes[i]).insert
+                (acc.canonicalize eclass.nodes[i]).1 (g.find classId).1).get? nd =
+                some id →
+              ∀ c ∈ nd.children, c < g.unionFind.parent.size := by
+            intro nd id hget c hc
+            by_cases hcn : (acc.canonicalize eclass.nodes[i]).1 = nd
+            · subst hcn; exact h_canon_bnd c hc
+            · rw [hashcons_get?_insert_ne _ _ _ _ hcn] at hget; exact h_erase nd id hget c hc
+          split
+          · exact ⟨h_insert, acc1_wf, acc1_sz⟩
+          · exact ⟨h_insert, acc1_wf, acc1_sz⟩)).1 nd id
 
 /-- add preserves WellFormed on the UF. -/
 theorem add_preserves_uf_wf (g : EGraph Op) (node : ENode Op) (hwf : WellFormed g.unionFind) :

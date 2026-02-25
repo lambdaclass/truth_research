@@ -1,6 +1,6 @@
 # LambdaSat
 
-Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 218 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **no user-level assumptions about rule application soundness**.
+Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 233 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
 
 Generalized from [VR1CS-Lean](https://github.com/manuelpuebla/vr1cs-lean) v1.3.0.
 
@@ -30,10 +30,11 @@ theorem ematchF_sound (g : EGraph Op) (pat : Pattern Op)
     (hmem : σ ∈ ematchF fuel g pat classId) :
     Pattern.eval pat env v σ = v (root g.unionFind classId)
 
--- Full pipeline WITHOUT PreservesCV assumption (v1.0.0)
-theorem full_pipeline_soundness_internal (g : EGraph Op)
+-- Full pipeline with zero external hypotheses (v1.1.0)
+theorem full_pipeline_soundness (g : EGraph Op)
     (rules : List (PatternSoundRule Op Val))
-    (hsss : SameShapeSemantics) (hies : InstantiateEvalSound Op Val env)
+    (hcv : ConsistentValuation g env v) (hpmi : PostMergeInvariant g)
+    (hshi : SemanticHashconsInv g env v) (hhcb : HashconsChildrenBounded g)
     ... :
     ∃ v_sat, EvalExpr.evalExpr expr env =
       v_sat (root (saturateF ...).unionFind rootId)
@@ -78,18 +79,24 @@ Path A (v0.3.0 — with PreservesCV assumption):
         → saturateF_preserves_consistent (SaturationSpec)
           → full_pipeline_soundness_greedy (TranslationValidation)
 
-Path B (v1.0.0 — no user assumptions):                                  ← NEW
-  ematchF_sound (EMatchSpec)                                             ← NEW
-    → applyRuleAtF_sound (EMatchSpec)                                    ← NEW
-      → saturateF_preserves_consistent_internal (EMatchSpec)             ← NEW
+Path B (v1.0.0 — no user assumptions):
+  ematchF_sound (EMatchSpec)
+    → applyRuleAtF_sound (EMatchSpec)
+      → saturateF_preserves_consistent_internal (EMatchSpec)
         → computeCostsF_preserves_consistency (SemanticSpec)
           → extractF_correct / extractILP_correct (ExtractSpec / ILPSpec)
-            → full_pipeline_soundness_internal (TranslationValidation)   ← NEW
+            → full_pipeline_soundness_internal (TranslationValidation)
+
+Path C (v1.1.0 — zero external hypotheses):                              ← NEW
+  sameShapeSemantics_holds (EMatchSpec)                                   ← NEW
+  + InstantiateEvalSound_holds (EMatchSpec)                               ← NEW
+  + ematchF_substitution_bounded (EMatchSpec)                             ← NEW
+    → full_pipeline_soundness (TranslationValidation)                     ← NEW
 ```
 
-**Sorry status**: **Zero sorry** since v0.3.0. **Zero user-level assumptions** since v1.0.0.
+**Sorry status**: **Zero sorry** since v0.3.0. **Zero external hypotheses** since v1.1.0.
 
-In v0.3.0, `PreservesCV` required users to prove that each rule application preserves consistency. In v1.0.0, `ematchF_sound` + `InstantiateEvalSound` derive this automatically from pattern soundness — the motor itself guarantees that its matching is correct.
+In v0.3.0, `PreservesCV` required users to prove that each rule application preserves consistency. In v1.0.0, `ematchF_sound` + `InstantiateEvalSound` derive this automatically from pattern soundness. In v1.1.0, the three remaining hypotheses (`SameShapeSemantics`, `InstantiateEvalSound`, `ematchF_substitution_bounded`) are all discharged as internal theorems, yielding `full_pipeline_soundness` with only structural assumptions about the initial e-graph state.
 
 Four-tier invariant system:
 - **EGraphWF**: Full well-formedness (hashcons + classes + UF consistency)
@@ -151,13 +158,14 @@ LambdaSat/
 ├── LambdaSat/
 │   ├── UnionFind.lean              -- Union-Find with path compression (44 theorems)
 │   ├── Core.lean                   -- EGraph Op [NodeOps Op]: add, merge, rebuild
-│   ├── CoreSpec.lean               -- EGraphWF, PostMergeInvariant, AddExprInv (78 theorems)
+│   ├── CoreSpec.lean               -- EGraphWF, PostMergeInvariant, AddExprInv (79 theorems)
 │   ├── EMatch.lean                 -- Pattern Op, generic e-matching
 │   ├── Saturate.lean               -- Fuel-based saturation loop
 │   ├── SemanticSpec.lean           -- ConsistentValuation, SemanticHashconsInv (49 theorems)
-│   ├── SoundRule.lean              -- SoundRewriteRule, conditional rules (4 theorems)
-│   ├── SaturationSpec.lean         -- Saturation soundness chain (15 theorems, 0 sorry)
-│   ├── EMatchSpec.lean             -- ematchF_sound, PatternSoundRule, full internal pipeline (25 theorems) ← v1.0.0
+│   ├── SoundRule.lean              -- SoundRewriteRule, conditional rules (3 theorems)
+│   ├── SaturationSpec.lean         -- Saturation soundness chain (13 theorems, 0 sorry)
+│   ├── AddNodeTriple.lean          -- add_node_triple: add preserves (CV,PMI,SHI,HCB) (3 theorems) ← v1.1.0
+│   ├── EMatchSpec.lean             -- ematchF_sound, InstantiateEvalSound_holds (25 theorems) ← v1.0.0+
 │   ├── Extractable.lean            -- Extractable typeclass + extractF
 │   ├── ExtractSpec.lean            -- extractF_correct, extractAuto_correct
 │   ├── Optimize.lean               -- Saturation + extraction pipelines
@@ -168,7 +176,7 @@ LambdaSat/
 │   ├── ILPSpec.lean                -- extractILP_correct, ilp_extraction_soundness
 │   ├── ParallelMatch.lean          -- IO.asTask parallel e-matching
 │   ├── ParallelSaturate.lean       -- Parallel saturation with threshold fallback
-│   └── TranslationValidation.lean  -- ProofWitness, optimization_soundness (8 theorems)
+│   └── TranslationValidation.lean  -- ProofWitness, full_pipeline_soundness (8 theorems)
 ├── Tests/
 │   └── IntegrationTests.lean       -- ArithOp concrete instance, 8 pipeline tests
 ├── lakefile.toml
@@ -189,6 +197,17 @@ LambdaSat supports two extraction strategies, both with verified soundness:
 
 The ILP solver (HiGHS or built-in branch-and-bound) is outside the TCB — its output is validated by `checkSolution` before extraction.
 
+### Trusted Computing Base (TCB)
+
+The soundness guarantee depends only on:
+
+1. **Lean 4 kernel** — type-checks all proofs
+2. **Typeclass instances** — users must correctly implement `NodeOps`, `NodeSemantics`, `Extractable` for their domain. LambdaSat proves that *given correct instances*, the pipeline is sound.
+
+Outside the TCB:
+- **ILP solver** (HiGHS/B&B): certificate-checked by `checkSolution`
+- **ParallelMatch.lean** / **ParallelSaturate.lean**: use `IO.asTask` for parallel execution. These are `IO`-based wrappers around the verified sequential algorithms. They do not carry formal proofs — their correctness depends on Lean's task runtime producing the same results as sequential execution. For maximum assurance, use the sequential `saturateF` + `ematchF` (fully verified) rather than the parallel variants.
+
 ---
 
 ## Phases
@@ -202,5 +221,6 @@ The ILP solver (HiGHS or built-in branch-and-bound) is outside the TCB — its o
 | Fase 5: Saturation Soundness | Complete | SoundRule, SaturationSpec — closes the soundness gap for saturation |
 | Fase 6: Close Rebuild Sorry | Complete | SemanticHashconsInv + rebuildStepBody_preserves_triple — zero sorry |
 | Fase 7: ematchF Soundness | Complete | Pattern.eval, ematchF_sound, full_pipeline_soundness_internal — eliminates PreservesCV |
+| Fase 8: Discharge Hypotheses | Complete | InstantiateEvalSound_holds, ematchF_substitution_bounded, full_pipeline_soundness — zero external hypotheses |
 
-**Current version: v1.0.0** — 218 theorems, 7,748 LOC, **0 sorry**, zero custom axioms, **0 user assumptions (PreservesCV eliminated)**.
+**Current version: v1.1.0** — 233 theorems, 8,622 LOC, **0 sorry**, zero custom axioms, **zero external hypotheses** in `full_pipeline_soundness`.

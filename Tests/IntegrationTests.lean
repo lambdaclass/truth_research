@@ -63,6 +63,26 @@ instance : NodeOps ArithOp where
     | op, _ => op
   mapChildren_children f op := by
     cases op <;> simp
+  replaceChildren_children op ids hlen := by
+    cases op with
+    | const n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.children]
+    | var n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.children]
+    | add l r =>
+      simp [NodeOps.children] at hlen
+      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.children]
+    | mul l r =>
+      simp [NodeOps.children] at hlen
+      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.children]
+  replaceChildren_sameShape op ids hlen := by
+    cases op with
+    | const n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.mapChildren]
+    | var n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.mapChildren]
+    | add l r =>
+      simp [NodeOps.children] at hlen
+      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.mapChildren]
+    | mul l r =>
+      simp [NodeOps.children] at hlen
+      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.mapChildren]
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 3: Arithmetic Expression Type + Extractable/EvalExpr
@@ -115,6 +135,16 @@ instance : NodeSemantics ArithOp Nat where
       rw [h l (by simp [NodeOps.children]), h r (by simp [NodeOps.children])]
   evalOp_mapChildren f op env v := by
     cases op <;> rfl
+  evalOp_skeleton op₁ op₂ env v₁ v₂ hskel hc := by
+    cases op₁ <;> cases op₂ <;> simp_all [NodeOps.mapChildren]
+    · -- add/add: use positional children agreement
+      have h0 := hc 0 (by simp [NodeOps.children]) (by simp [NodeOps.children])
+      have h1 := hc 1 (by simp [NodeOps.children]) (by simp [NodeOps.children])
+      simp [NodeOps.children] at h0 h1; rw [h0, h1]
+    · -- mul/mul: use positional children agreement
+      have h0 := hc 0 (by simp [NodeOps.children]) (by simp [NodeOps.children])
+      have h1 := hc 1 (by simp [NodeOps.children]) (by simp [NodeOps.children])
+      simp [NodeOps.children] at h0 h1; rw [h0, h1]
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 4: Helper — Build e-graphs for testing
@@ -273,6 +303,94 @@ def test8_parallelSaturation : IO Bool := do
   return result.graph.numNodes >= g3.numNodes
 
 -- ══════════════════════════════════════════════════════════════════
+-- Test 9: Edge case — empty graph extraction (should return none)
+-- ══════════════════════════════════════════════════════════════════
+
+def test9_emptyGraphExtraction : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let costFn : ENode ArithOp → Nat := fun _ => 1
+  let g1 := g0.computeCosts costFn
+  let result : Option ArithExpr := extractAuto g1 0
+  return result == none
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 10: Edge case — self-merge (merging a class with itself)
+-- ══════════════════════════════════════════════════════════════════
+
+def test10_selfMerge : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (cId, g1) := addConst g0 7
+  let g2 := g1.merge cId cId
+  let g3 := g2.rebuild
+  let costFn : ENode ArithOp → Nat := fun _ => 1
+  let g4 := g3.computeCosts costFn
+  let result : Option ArithExpr := extractAuto g4 cId
+  return result == some (.const 7)
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 11: Edge case — saturation with fuel=0 (no iterations)
+-- ══════════════════════════════════════════════════════════════════
+
+def test11_zeroFuelSaturation : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (xId, g1) := addVar g0 0
+  let (yId, g2) := addVar g1 1
+  let (rootId, g3) := addAddNode g2 xId yId
+  let gSat := saturateF 0 0 10 g3 [addCommRule]
+  let costFn : ENode ArithOp → Nat := fun _ => 1
+  let g4 := gSat.computeCosts costFn
+  let result : Option ArithExpr := extractAuto g4 rootId
+  -- With zero fuel, saturation does nothing; graph unchanged
+  return result == some (.add (.var 0) (.var 1))
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 12: ILP — checkSolution rejects invalid solution
+-- ══════════════════════════════════════════════════════════════════
+
+def test12_checkSolutionRejectsInvalid : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let canonRoot := root g3.unionFind rootId
+  -- Missing child activations — should fail
+  let badSol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 0)]
+    objectiveValue := 1
+  }
+  return !checkSolution g3 rootId badSol
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 13: Edge case — duplicate node insertion (hashcons dedup)
+-- ══════════════════════════════════════════════════════════════════
+
+def test13_hashconsDedup : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c1, g1) := addConst g0 42
+  let (c2, g2) := addConst g1 42
+  -- Same node should map to same class via hashcons
+  return root g2.unionFind c1 == root g2.unionFind c2
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 14: Edge case — near-zero fuel (fuel=1, maxIter=1)
+-- ══════════════════════════════════════════════════════════════════
+
+def test14_nearZeroFuel : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (xId, g1) := addVar g0 0
+  let (yId, g2) := addVar g1 1
+  let (rootId, g3) := addAddNode g2 xId yId
+  -- fuel=1, maxIter=1: allows one iteration but may not apply all rules
+  let gSat := saturateF 1 1 10 g3 [addCommRule]
+  let costFn : ENode ArithOp → Nat := fun _ => 1
+  let g4 := gSat.computeCosts costFn
+  let result : Option ArithExpr := extractAuto g4 rootId
+  -- With limited fuel, result should still be valid (either original or transformed)
+  return result.isSome
+
+-- ══════════════════════════════════════════════════════════════════
 -- Test Runner
 -- ══════════════════════════════════════════════════════════════════
 
@@ -298,7 +416,13 @@ def main : IO UInt32 := do
     ("T5: greedy optimization pipeline", test5_optimizePipeline),
     ("T6: ILP extraction (hand-crafted)", test6_ilpExtraction),
     ("T7: ILP checkSolution", test7_checkSolution),
-    ("T8: parallel saturation", test8_parallelSaturation)
+    ("T8: parallel saturation", test8_parallelSaturation),
+    ("T9: empty graph extraction", test9_emptyGraphExtraction),
+    ("T10: self-merge", test10_selfMerge),
+    ("T11: zero-fuel saturation", test11_zeroFuelSaturation),
+    ("T12: ILP rejects invalid solution", test12_checkSolutionRejectsInvalid),
+    ("T13: hashcons deduplication", test13_hashconsDedup),
+    ("T14: near-zero fuel saturation", test14_nearZeroFuel)
   ]
 
   for (name, test) in tests do

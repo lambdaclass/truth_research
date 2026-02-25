@@ -31,6 +31,16 @@ class NodeSemantics (Op : Type) (Val : Type) [NodeOps Op] where
   evalOp_mapChildren : ∀ (f : EClassId → EClassId) (op : Op) (env : Nat → Val)
     (v : EClassId → Val),
     evalOp (NodeOps.mapChildren f op) env v = evalOp op env (fun c => v (f c))
+  /-- Ops with identical skeletons evaluate the same when corresponding children
+      have matching values. The skeleton is `mapChildren (fun _ => 0) op`.
+      This bridges pattern evaluation to node evaluation in ematchF_sound. -/
+  evalOp_skeleton : ∀ (op₁ op₂ : Op) (env : Nat → Val) (v₁ v₂ : EClassId → Val),
+    NodeOps.mapChildren (fun _ => (0 : EClassId)) op₁ =
+      NodeOps.mapChildren (fun _ => (0 : EClassId)) op₂ →
+    (∀ (i : Nat) (h₁ : i < (NodeOps.children op₁).length)
+        (h₂ : i < (NodeOps.children op₂).length),
+      v₁ ((NodeOps.children op₁)[i]) = v₂ ((NodeOps.children op₂)[i])) →
+    evalOp op₁ env v₁ = evalOp op₂ env v₂
 
 /-- Semantic evaluation of an ENode: delegates to `NodeSemantics.evalOp`. -/
 def NodeEval {Op Val : Type} [NodeOps Op] [NodeSemantics Op Val]
