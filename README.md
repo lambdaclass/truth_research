@@ -178,7 +178,7 @@ LambdaSat/
 │   ├── ParallelSaturate.lean       -- Parallel saturation with threshold fallback
 │   └── TranslationValidation.lean  -- ProofWitness, full_pipeline_soundness (8 theorems)
 ├── Tests/
-│   └── IntegrationTests.lean       -- ArithOp concrete instance, 14 pipeline tests
+│   └── IntegrationTests.lean       -- ArithOp concrete instance, 23 pipeline tests
 ├── lakefile.toml
 ├── lean-toolchain                  -- leanprover/lean4:v4.26.0
 └── LambdaSat.lean                  -- module root
@@ -217,7 +217,7 @@ Outside the TCB:
 | Fase 1: Foundation | Complete | UnionFind, EGraph Core (typeclass-parameterized) |
 | Fase 2: Specification | Complete | CoreSpec (79 thms), EMatch, Saturate, SemanticSpec (49 thms) |
 | Fase 3: Extraction + Optimization | Complete | Extractable, ExtractSpec, Optimize, ILP pipeline + ILPSpec |
-| Fase 4: Parallelism + Integration | Complete | ParallelMatch, ParallelSaturate, TranslationValidation, 8 integration tests |
+| Fase 4: Parallelism + Integration | Complete | ParallelMatch, ParallelSaturate, TranslationValidation, 23 integration tests |
 | Fase 5: Saturation Soundness | Complete | SoundRule, SaturationSpec — closes the soundness gap for saturation |
 | Fase 6: Close Rebuild Sorry | Complete | SemanticHashconsInv + rebuildStepBody_preserves_triple — zero sorry |
 | Fase 7: ematchF Soundness | Complete | Pattern.eval, ematchF_sound, full_pipeline_soundness_internal — eliminates PreservesCV |

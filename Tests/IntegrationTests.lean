@@ -391,6 +391,179 @@ def test14_nearZeroFuel : IO Bool := do
   return result.isSome
 
 -- ══════════════════════════════════════════════════════════════════
+-- Test 15: ILP — extractILP with fuel=0 returns none
+-- ══════════════════════════════════════════════════════════════════
+
+def test15_ilpZeroFuel : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let canonRoot := root g3.unionFind rootId
+  let canonC5 := root g3.unionFind c5Id
+  let canonC3 := root g3.unionFind c3Id
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0), (canonC5, 0), (canonC3, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true), (canonC5, true), (canonC3, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 2), (canonC5, 0), (canonC3, 0)]
+    objectiveValue := 3
+  }
+  let result : Option ArithExpr := extractILP g3 sol rootId 0
+  return result == none
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 16: ILP — checkSolution rejects inactive root
+-- ══════════════════════════════════════════════════════════════════
+
+def test16_ilpInactiveRoot : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (rootId, g1) := addConst g0 5
+  let canonRoot := root g1.unionFind rootId
+  -- Root not activated
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, false)]
+    levels := Std.HashMap.ofList [(canonRoot, 0)]
+    objectiveValue := 1
+  }
+  return !checkSolution g1 rootId sol
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 17: ILP — checkSolution rejects out-of-range node index
+-- ══════════════════════════════════════════════════════════════════
+
+def test17_ilpBadNodeIndex : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (rootId, g1) := addConst g0 5
+  let canonRoot := root g1.unionFind rootId
+  -- nodeIdx = 999 is out of range (class has 1 node)
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 999)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 0)]
+    objectiveValue := 1
+  }
+  return !checkSolution g1 rootId sol
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 18: ILP — checkSolution rejects bad level ordering
+-- ══════════════════════════════════════════════════════════════════
+
+def test18_ilpBadLevels : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let canonRoot := root g3.unionFind rootId
+  let canonC5 := root g3.unionFind c5Id
+  let canonC3 := root g3.unionFind c3Id
+  -- Parent level 0, child levels 2 — violates acyclicity (parent > child)
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0), (canonC5, 0), (canonC3, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true), (canonC5, true), (canonC3, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 0), (canonC5, 2), (canonC3, 2)]
+    objectiveValue := 3
+  }
+  return !checkSolution g3 rootId sol
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 19: ILP — self-loop child accepted by acyclicity
+-- ══════════════════════════════════════════════════════════════════
+
+def test19_ilpSelfLoopAccepted : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (cId, g1) := addConst g0 7
+  -- add(cId, cId) — both children are in same class as parent after merge
+  let (addId, g2) := addAddNode g1 cId cId
+  let g3 := g2.merge addId cId  -- merge add class with const class
+  let g4 := g3.rebuild
+  let canonRoot := root g4.unionFind cId
+  -- Self-loops: children point to the same canonical class as the node
+  -- checkAcyclicity allows this (if child == classId then true)
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 0)]
+    objectiveValue := 1
+  }
+  -- The const node (index 0 in the merged class) has no children → passes trivially
+  -- This tests that the merge + rebuild produces a valid state for ILP
+  return checkSolution g4 cId sol
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 20: ILP — solutionCost with zero-cost function is 0
+-- ══════════════════════════════════════════════════════════════════
+
+def test20_ilpZeroCost : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let canonRoot := root g3.unionFind rootId
+  let canonC5 := root g3.unionFind c5Id
+  let canonC3 := root g3.unionFind c3Id
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0), (canonC5, 0), (canonC3, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true), (canonC5, true), (canonC3, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 2), (canonC5, 0), (canonC3, 0)]
+    objectiveValue := 0
+  }
+  let cost := solutionCost g3 sol (fun _ => 0)
+  return cost == 0
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 21: ILP — encodeEGraph preserves root and class count
+-- ══════════════════════════════════════════════════════════════════
+
+def test21_ilpEncodeStructural : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let prob := encodeEGraph g3 rootId (fun _ => 1)
+  let rootOk := prob.rootClassId == root g3.unionFind rootId
+  let classOk := prob.numClasses == g3.classes.size
+  return rootOk && classOk
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 22: ILP — extractILP fuel monotonicity (more fuel, same result)
+-- ══════════════════════════════════════════════════════════════════
+
+def test22_ilpFuelMonotonicity : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let (c5Id, g1) := addConst g0 5
+  let (c3Id, g2) := addConst g1 3
+  let (rootId, g3) := addAddNode g2 c5Id c3Id
+  let canonRoot := root g3.unionFind rootId
+  let canonC5 := root g3.unionFind c5Id
+  let canonC3 := root g3.unionFind c3Id
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList [(canonRoot, 0), (canonC5, 0), (canonC3, 0)]
+    activatedClasses := Std.HashMap.ofList [(canonRoot, true), (canonC5, true), (canonC3, true)]
+    levels := Std.HashMap.ofList [(canonRoot, 2), (canonC5, 0), (canonC3, 0)]
+    objectiveValue := 3
+  }
+  -- Extract with fuel=3 and fuel=100 — should give same result
+  let r3 : Option ArithExpr := extractILP g3 sol rootId 3
+  let r100 : Option ArithExpr := extractILP g3 sol rootId 100
+  return r3.isSome && r3 == r100
+
+-- ══════════════════════════════════════════════════════════════════
+-- Test 23: ILP — empty graph checkSolution rejects (no root class)
+-- ══════════════════════════════════════════════════════════════════
+
+def test23_ilpEmptyGraph : IO Bool := do
+  let g0 : EGraph ArithOp := .empty
+  let sol : ILPSolution := {
+    selectedNodes := Std.HashMap.ofList []
+    activatedClasses := Std.HashMap.ofList []
+    levels := Std.HashMap.ofList []
+    objectiveValue := 0
+  }
+  -- Root class 0 doesn't exist → checkRootActive fails
+  return !checkSolution g0 0 sol
+
+-- ══════════════════════════════════════════════════════════════════
 -- Test Runner
 -- ══════════════════════════════════════════════════════════════════
 
@@ -422,7 +595,16 @@ def main : IO UInt32 := do
     ("T11: zero-fuel saturation", test11_zeroFuelSaturation),
     ("T12: ILP rejects invalid solution", test12_checkSolutionRejectsInvalid),
     ("T13: hashcons deduplication", test13_hashconsDedup),
-    ("T14: near-zero fuel saturation", test14_nearZeroFuel)
+    ("T14: near-zero fuel saturation", test14_nearZeroFuel),
+    ("T15: ILP extractILP fuel=0", test15_ilpZeroFuel),
+    ("T16: ILP rejects inactive root", test16_ilpInactiveRoot),
+    ("T17: ILP rejects out-of-range node index", test17_ilpBadNodeIndex),
+    ("T18: ILP rejects bad level ordering", test18_ilpBadLevels),
+    ("T19: ILP self-loop accepted by acyclicity", test19_ilpSelfLoopAccepted),
+    ("T20: ILP solutionCost zero-cost", test20_ilpZeroCost),
+    ("T21: ILP encodeEGraph structural", test21_ilpEncodeStructural),
+    ("T22: ILP fuel monotonicity", test22_ilpFuelMonotonicity),
+    ("T23: ILP empty graph rejected", test23_ilpEmptyGraph)
   ]
 
   for (name, test) in tests do

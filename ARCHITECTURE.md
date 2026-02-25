@@ -305,6 +305,7 @@
 | **v0.3.0** | Feb 2026 | Zero sorry: SemanticHashconsInv closes rebuildStepBody gap. 19 src files, 6,895 LOC, 198 theorems, 0 sorry, zero axioms. |
 | **v1.0.0** | Feb 2026 | PreservesCV eliminated: Pattern.eval + ematchF_sound + full_pipeline_soundness_internal. 20 src files, 7,748 LOC, 218 theorems, 0 sorry, zero axioms, zero user assumptions. |
 | **v1.1.0** | Feb 2026 | Zero external hypotheses: InstantiateEvalSound_holds + ematchF_substitution_bounded + processClass_preserves_hcb + full_pipeline_soundness. 21 src files, 8,622 LOC, 233 theorems, 0 sorry, zero axioms, zero external hypotheses. 13 integration tests (5 new edge-case tests). |
+| **v1.2.0** | Feb 2026 | ILP certificate verification: checkSolution soundness (4 check*_sound), encoding properties (encodeEGraph_rootClassId/numClasses), extractILP fuel monotonicity. 21 src files, 8,956 LOC, 248 theorems, 0 sorry, zero axioms. 23 integration tests (9 new ILP edge-case tests). |
 
 ---
 
