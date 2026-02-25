@@ -241,6 +241,61 @@
 
 ---
 
+### Fase 9: ILP Certificate Verification (v1.2.0) — PLANNED
+
+**Contents**: Formal verification of the ILP extraction pipeline. Proves what `ValidSolution` means by decomposing `checkSolution` into individual Prop properties (root activation, exactly-one selection, child dependencies, acyclicity). Certificate evaluation soundness (evalVar, checkConstraint, isFeasible). Encoding correctness for `encodeEGraph`. Fuel sufficiency for `extractILPAuto`.
+
+**Key insight** (L-250): `ValidSolution` is a user-facing bridge, not an internal correctness requirement. `extractILP_correct` already works with `ValidSolution` as hypothesis; the bridge allows users to discharge it computationally via `checkSolution`.
+
+**Strategy**: Decompose `checkSolution = check1 && check2 && check3 && check4` via `Bool.and_eq_true_iff`. Each `checkN = true → PropN` proven separately. F9S3 (checkExactlyOne) pioneers the HashMap.fold approach; F9S4/F9S5 replicate the pattern.
+
+**QA feedback incorporated**:
+- F9S3 is GATE: establishes reusable HashMap.fold decomposition approach
+- F9S5: constructive proof via level decrease contradiction (no Classical.em)
+- F9S9: spec-first approach — define `EncodingSpec` Prop before proving
+
+**Files**:
+- `LambdaSat/ILP.lean` (modified: +simp lemmas)
+- `LambdaSat/ILPSpec.lean` (modified: +checkSolution decomposition, fuel, cost)
+- `LambdaSat/ILPEncode.lean` (modified: +cert eval, +encoding correctness)
+
+#### DAG (v1.2.0)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| F9S1 ILP simp lemmas | HOJA | — | ✓ |
+| F9S2 checkRootActive_sound | HOJA | F9S1 | ✓ |
+| F9S3 checkExactlyOne_sound | CRIT/GATE | F9S1 | ✓ |
+| F9S4 checkChildDeps_sound | PAR | F9S1, F9S3 | ✓ |
+| F9S5 checkAcyclicity_sound | PAR | F9S1, F9S3 | ✓ |
+| F9S6 checkSolution_sound | HOJA | F9S2-F9S5 | ✓ |
+| F9S7 evalVar+checkConstraint | PAR | — | ✓ |
+| F9S8 isFeasible_sound | PAR | F9S7 | ✓ |
+| F9S9 encodeEGraph_correctness | FUND | F9S1 | ✓ |
+| F9S10 extractILPAuto_fuel | HOJA | F9S5, F9S9 | ✓ |
+| F9S11 solutionCost_correct | HOJA | F9S1 | ✓ |
+
+#### Bloques
+
+- [x] **Bloque 23**: F9S1 + F9S2 (parallel HOJAS: simp foundation + rootActive) ✓
+- [x] **Bloque 24**: F9S3 (GATE: checkExactlyOne — pioneers HashMap.fold approach) ✓
+- [x] **Bloque 25**: F9S4 + F9S5 + F9S7 + F9S8 (parallel PARs: checkChildDeps + acyclicity + cert eval) ✓
+- [x] **Bloque 26**: F9S6 + F9S11 (parallel HOJAS: composition + cost) ✓
+- [x] **Bloque 27**: F9S9 (FUND: encodeEGraph correctness) ✓
+- [x] **Bloque 28**: F9S10 (HOJA: fuel sufficiency) ✓
+
+#### Decisiones de diseño
+
+**HashMap.fold approach**: `checkExactlyOne`, `checkChildDeps`, `checkAcyclicity` all use `g.classes.fold`. Instead of fighting `HashMap.fold` directly (L-200, L-302: intractable), prove properties from the RESULT structure: if `fold (init := true) (fun acc k v => acc && f k v) = true`, then `∀ (k, v) ∈ map, f k v = true`. Pioneer this approach in F9S3 (GATE), then replicate in F9S4/F9S5.
+
+**Spec-first for F9S9**: Define `EncodingSpec g constraints : Prop` specifying what a correct encoding means (root constraint exists, exactly-one constraints per reachable class, child dependency constraints, acyclicity constraints). Then prove `encodeEGraph g` satisfies this spec. De-risk with `_aux` sketch — may defer to v1.2.1 if compound invariant proves intractable.
+
+**Certificate evaluation (F9S7-F9S8)**: Independent of checkSolution decomposition. `evalVar`, `checkConstraint`, `checkBounds` are simpler (no HashMap.fold). Use `Array.all` → `∀` bridge for `isFeasible_sound`.
+
+**Scope**: Soundness only (checkSolution = true → properties hold). No completeness (¬ValidSolution → checkSolution = false). ILP solver remains outside TCB.
+
+---
+
 ## Version History
 
 | Version | Date | Highlights |

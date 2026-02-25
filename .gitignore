@@ -1,2 +1,12 @@
 .lake/
+lake-packages/
 .DS_Store
+*.pdf
+*.pptx
+*.mp4
+*.zip
+*.o
+*.a
+*.env
+*.pem
+*.key

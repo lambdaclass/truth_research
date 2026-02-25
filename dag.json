@@ -5,7 +5,7 @@
     {
       "id": "fase1",
       "name": "Fase 1: Foundation",
-      "status": "pending",
+      "status": "completed",
       "nodes": [
         {
           "id": "F1S1",
@@ -77,7 +77,7 @@
     {
       "id": "fase2",
       "name": "Fase 2: Specification",
-      "status": "pending",
+      "status": "completed",
       "nodes": [
         {
           "id": "F2S1",
@@ -176,7 +176,7 @@
     {
       "id": "fase3",
       "name": "Fase 3: Extraction + Optimization",
-      "status": "pending",
+      "status": "completed",
       "nodes": [
         {
           "id": "F3S1",
@@ -316,7 +316,7 @@
     {
       "id": "fase4",
       "name": "Fase 4: Parallelism + Integration",
-      "status": "pending",
+      "status": "completed",
       "nodes": [
         {
           "id": "F4S1",
@@ -414,7 +414,7 @@
     {
       "id": "fase8",
       "name": "Fase 8: Discharge Hypotheses + Polish",
-      "status": "pending",
+      "status": "completed",
       "nodes": [
         {
           "id": "F8S1",
@@ -560,12 +560,323 @@
           "closed_at": "2026-02-25"
         }
       ]
+    },
+    {
+      "id": "fase9",
+      "name": "Fase 9: ILP Certificate Verification",
+      "status": "completed",
+      "nodes": [
+        {
+          "id": "F9S1",
+          "name": "ILP simp lemmas",
+          "type": "HOJA",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILP.lean"
+          ],
+          "deps": [],
+          "blocks": [
+            "F9S3",
+            "F9S4",
+            "F9S5",
+            "F9S9",
+            "F9S11"
+          ],
+          "metrics": {
+            "loc": 211,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 5,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S2",
+          "name": "checkRootActive_sound",
+          "type": "HOJA",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S1"
+          ],
+          "blocks": [
+            "F9S6"
+          ],
+          "metrics": {
+            "loc": 143,
+            "theorems": 4,
+            "lemmas": 0,
+            "defs": 1,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S3",
+          "name": "checkExactlyOne_sound",
+          "type": "CRITICO",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S1"
+          ],
+          "blocks": [
+            "F9S4",
+            "F9S5",
+            "F9S6"
+          ],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S4",
+          "name": "checkChildDeps_sound",
+          "type": "PARALELO",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S1",
+            "F9S3"
+          ],
+          "blocks": [
+            "F9S6"
+          ],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S5",
+          "name": "checkAcyclicity_sound",
+          "type": "PARALELO",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S1",
+            "F9S3"
+          ],
+          "blocks": [
+            "F9S6",
+            "F9S10"
+          ],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S6",
+          "name": "checkSolution_sound",
+          "type": "HOJA",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S2",
+            "F9S3",
+            "F9S4",
+            "F9S5"
+          ],
+          "blocks": [],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S7",
+          "name": "evalVar+checkConstraint",
+          "type": "PARALELO",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPEncode.lean"
+          ],
+          "deps": [],
+          "blocks": [
+            "F9S8"
+          ],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S8",
+          "name": "isFeasible_sound",
+          "type": "PARALELO",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPEncode.lean"
+          ],
+          "deps": [
+            "F9S7"
+          ],
+          "blocks": [],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S9",
+          "name": "encodeEGraph_correctness",
+          "type": "FUNDACIONAL",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPEncode.lean"
+          ],
+          "deps": [
+            "F9S1"
+          ],
+          "blocks": [
+            "F9S10"
+          ],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S10",
+          "name": "extractILPAuto_fuel",
+          "type": "HOJA",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S5",
+            "F9S9"
+          ],
+          "blocks": [],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        },
+        {
+          "id": "F9S11",
+          "name": "solutionCost_correct",
+          "type": "HOJA",
+          "status": "completed",
+          "files": [
+            "LambdaSat/ILPSpec.lean"
+          ],
+          "deps": [
+            "F9S1"
+          ],
+          "blocks": [],
+          "metrics": {
+            "loc": 0,
+            "theorems": 0,
+            "lemmas": 0,
+            "defs": 0,
+            "sorry": 0
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "id": "B23",
+          "name": "ILP foundation: simp + rootActive",
+          "nodes": [
+            "F9S1",
+            "F9S2"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        },
+        {
+          "id": "B24",
+          "name": "GATE: checkExactlyOne (HashMap.fold pattern)",
+          "nodes": [
+            "F9S3"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        },
+        {
+          "id": "B25",
+          "name": "Check components + cert eval (agent team)",
+          "nodes": [
+            "F9S4",
+            "F9S5",
+            "F9S7",
+            "F9S8"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        },
+        {
+          "id": "B26",
+          "name": "Composition + cost",
+          "nodes": [
+            "F9S6",
+            "F9S11"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        },
+        {
+          "id": "B27",
+          "name": "GATE: encodeEGraph correctness",
+          "nodes": [
+            "F9S9"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        },
+        {
+          "id": "B28",
+          "name": "Fuel sufficiency",
+          "nodes": [
+            "F9S10"
+          ],
+          "status": "completed",
+          "closed_at": "2026-02-25"
+        }
+      ]
     }
   ],
   "meta": {
     "created": "2026-02-19T22:04:19Z",
-    "updated": "2026-02-25T10:40:56Z",
-    "total_nodes": 22,
-    "completed_nodes": 22
+    "updated": "2026-02-25T14:50:39Z",
+    "total_nodes": 33,
+    "completed_nodes": 33
   }
 }

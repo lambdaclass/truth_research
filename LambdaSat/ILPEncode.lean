@@ -226,4 +226,83 @@ def ILPSolution.fromVarMap (varMap : Std.HashMap String Int)
          , levels := levels
          , objectiveValue := objValue }
 
+-- ══════════════════════════════════════════════════════════════════
+-- Simp lemmas and soundness theorems
+-- ══════════════════════════════════════════════════════════════════
+
+/-- `evalVar` unfolds for `nodeSelect`. -/
+@[simp] theorem evalVar_nodeSelect (sol : ILPSolution) (cid : EClassId) (nid : Nat) :
+    evalVar sol (.nodeSelect cid nid) =
+      match sol.selectedNodes.get? cid with
+      | some idx => if idx == nid then 1 else 0
+      | none => 0 := rfl
+
+/-- `evalVar` unfolds for `classActive`. -/
+@[simp] theorem evalVar_classActive (sol : ILPSolution) (cid : EClassId) :
+    evalVar sol (.classActive cid) =
+      if sol.isActive cid then 1 else 0 := rfl
+
+/-- `evalVar` unfolds for `level`. -/
+@[simp] theorem evalVar_level (sol : ILPSolution) (cid : EClassId) :
+    evalVar sol (.level cid) = (sol.getLevel cid : Int) := rfl
+
+/-- If all bounds are satisfied, each variable is within its bounds. -/
+theorem checkBounds_sound (sol : ILPSolution) (bounds : Array VarBound)
+    (h : checkBounds sol bounds = true) :
+    ∀ b ∈ bounds, b.lo ≤ evalVar sol b.var ∧ evalVar sol b.var ≤ b.hi := by
+  unfold checkBounds at h
+  intro b hb
+  have hb_elem := Array.all_eq_true_iff_forall_mem.mp h b hb
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hb_elem
+  exact hb_elem
+
+/-- If an ILP solution is feasible, all bounds and constraints are satisfied. -/
+theorem isFeasible_sound (sol : ILPSolution) (prob : ILPProblem)
+    (h : sol.isFeasible prob = true) :
+    checkBounds sol prob.bounds = true ∧
+    ∀ c ∈ prob.constraints, checkConstraint sol c = true := by
+  unfold ILPSolution.isFeasible at h
+  simp only [Bool.and_eq_true] at h
+  exact ⟨h.1, Array.all_eq_true_iff_forall_mem.mp h.2⟩
+
+-- ══════════════════════════════════════════════════════════════════
+-- Encoding Structural Properties (F9S9)
+-- ══════════════════════════════════════════════════════════════════
+
+section EncodingProperties
+
+variable {Op : Type} [NodeOps Op] [BEq Op] [Hashable Op]
+  [LawfulBEq Op] [LawfulHashable Op]
+
+private theorem fold_push_keys_size {α β : Type _} [BEq α] [Hashable α]
+    [EquivBEq α] [LawfulHashable α] (m : Std.HashMap α β) :
+    (m.fold (fun acc k _ => acc.push k) #[]).size = m.size := by
+  rw [Std.HashMap.fold_eq_foldl_toList, ← Std.HashMap.length_toList (m := m)]
+  suffices ∀ (init : Array α) (l : List (α × β)),
+    (List.foldl (fun acc b => acc.push b.1) init l).size = init.size + l.length by
+    simp
+  intro init l
+  induction l generalizing init with
+  | nil => simp
+  | cons hd tl ih =>
+    simp only [List.foldl_cons, List.length_cons]
+    rw [ih]; simp [Array.size_push]; omega
+
+set_option linter.unusedSectionVars false in
+/-- `encodeEGraph` stores the canonical root class ID. -/
+theorem encodeEGraph_rootClassId (g : EGraph Op) (rootId : EClassId)
+    (costFn : ENode Op → Nat) :
+    (encodeEGraph g rootId costFn).rootClassId = root g.unionFind rootId := by
+  unfold encodeEGraph; rfl
+
+set_option linter.unusedSectionVars false in
+/-- `encodeEGraph` records the number of e-classes. -/
+theorem encodeEGraph_numClasses (g : EGraph Op) (rootId : EClassId)
+    (costFn : ENode Op → Nat) :
+    (encodeEGraph g rootId costFn).numClasses = g.classes.size := by
+  unfold encodeEGraph
+  exact fold_push_keys_size g.classes
+
+end EncodingProperties
+
 end LambdaSat.ILP

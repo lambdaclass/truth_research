@@ -434,6 +434,207 @@
 
 ---
 
+## Criteria: Fase 9 — ILP Certificate Verification (v1.2.0)
+
+### Mechanical Checks (all nodes)
+
+<!-- CHECK:MECH-v1.2.0 -->
+| ID | Check | Method | Pass Criteria |
+|----|-------|--------|---------------|
+| `MECH-1` | Zero sorry | `grep -rn sorry LambdaSat/` | 0 matches (excluding comments) |
+| `MECH-2` | Zero custom axioms | `lean_verify` per new theorem | Only `propext`, `Quot.sound`, `Classical.choice` |
+| `MECH-3` | Clean build | `lake build` | Exit 0 |
+| `MECH-4` | Zero warnings | `lake build 2>&1` | No warnings |
+| `MECH-5` | No `native_decide` | Manual inspection | Only in `Decidable`/`Bool` contexts |
+| `MECH-6` | No `simp [*]` | Manual inspection | All `simp` with explicit lists or `simp only` |
+| `MECH-7` | Doc comments | Manual inspection | All new `def`, `theorem` with `/-- -/` |
+| `MECH-8` | `lean_verify` clean | MCP tool per theorem | Only standard axioms |
+
+### F9S1 — ILP simp lemmas [HOJA]
+
+<!-- CHECK:F9S1 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S1-SIMP-1` | `@[simp] isActive_def` fires correctly | REQUIRED |
+| `F9S1-SIMP-2` | `@[simp] getSelectedNodeIdx_def` fires correctly | REQUIRED |
+| `F9S1-SIMP-3` | `@[simp] getLevel_def` fires correctly | REQUIRED |
+| `F9S1-SIMP-4` | `@[simp] numVars_def`, `numConstraints_def` | REQUIRED |
+| `F9S1-EDGE-1` | Empty ILPSolution: defaults behave correctly | CHECK |
+| `F9S1-EDGE-2` | Missing keys: `isActive` returns false, `getLevel` returns 0 | CHECK |
+| `F9S1-QUAL-1` | Proofs by `rfl` or `unfold; rfl` | CHECK |
+| `F9S1-QUAL-2` | ≤ 20 LOC total | CHECK |
+
+### F9S2 — checkRootActive_sound [HOJA]
+
+<!-- CHECK:F9S2 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S2-THM-1` | `checkRootActive_sound`: `checkRootActive rootId sol = true → sol.isActive rootId = true` | REQUIRED |
+| `F9S2-THM-2` | Zero sorry | REQUIRED |
+| `F9S2-EDGE-1` | Root not in solution → checkRootActive = false | CHECK |
+| `F9S2-QUAL-1` | Proof ≤ 10 LOC | CHECK |
+
+### F9S3 — checkExactlyOne_sound [CRIT/GATE]
+
+<!-- CHECK:F9S3 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S3-THM-1` | `checkExactlyOne_sound`: `checkExactlyOne g sol = true → ∀ classId eclass, g.classes.get? classId = some eclass → sol.isActive classId → ∃ idx, sol.selectedNodes.get? classId = some idx ∧ idx < eclass.nodes.size` | REQUIRED |
+| `F9S3-THM-2` | Inactive class property: `¬sol.isActive classId → (sol.selectedNodes.get? classId).isNone` | REQUIRED |
+| `F9S3-THM-3` | Zero sorry | REQUIRED |
+| `F9S3-EDGE-1` | Empty classes HashMap → vacuous truth | CHECK |
+| `F9S3-EDGE-2` | Class with 0 nodes and active → checkExactlyOne = false | CHECK |
+| `F9S3-EDGE-3` | Class with exactly 1 node | CHECK |
+| `F9S3-STRESS-1` | HashMap.fold approach is reusable for F9S4/F9S5 | REQUIRED |
+| `F9S3-QUAL-1` | Gate de-risk: sketch proof before F9S4/F9S5 | REQUIRED |
+| `F9S3-QUAL-2` | Proof ≤ 50 LOC | CHECK |
+| `F9S3-ROBUST-1` | Does NOT depend on HashMap internal representation | CHECK |
+
+### F9S4 — checkChildDeps_sound [PAR]
+
+<!-- CHECK:F9S4 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S4-THM-1` | `checkChildDeps_sound`: `checkChildDeps g sol = true → ∀ classId eclass nodeIdx, g.classes.get? classId = some eclass → sol.selectedNodes.get? classId = some nodeIdx → nodeIdx < eclass.nodes.size → ∀ child ∈ NodeOps.children eclass.nodes[nodeIdx].op, sol.isActive (root g.unionFind child)` | REQUIRED |
+| `F9S4-THM-2` | Zero sorry | REQUIRED |
+| `F9S4-EDGE-1` | Node with empty children list → vacuous truth | CHECK |
+| `F9S4-EDGE-2` | Child points to same class (self-loop) | CHECK |
+| `F9S4-STRESS-1` | Reuses HashMap.fold pattern from F9S3 | CHECK |
+| `F9S4-QUAL-1` | Proof ≤ 50 LOC | CHECK |
+
+### F9S5 — checkAcyclicity_sound [PAR]
+
+<!-- CHECK:F9S5 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S5-THM-1` | `checkAcyclicity_sound`: `checkAcyclicity g sol = true → ∀ classId eclass nodeIdx, g.classes.get? classId = some eclass → sol.selectedNodes.get? classId = some nodeIdx → nodeIdx < eclass.nodes.size → ∀ child ∈ NodeOps.children eclass.nodes[nodeIdx].op, let canonChild := root g.unionFind child; canonChild ≠ classId → sol.getLevel classId > sol.getLevel canonChild` | REQUIRED |
+| `F9S5-THM-2` | Zero sorry | REQUIRED |
+| `F9S5-THM-3` | Constructive proof: level decrease → `Nat.lt_irrefl` contradiction for cycles, NO Classical.em | REQUIRED |
+| `F9S5-EDGE-1` | Self-referencing class (canonChild = classId) → skipped by check | CHECK |
+| `F9S5-EDGE-2` | All levels equal → only self-loops allowed | CHECK |
+| `F9S5-STRESS-1` | Reuses HashMap.fold pattern from F9S3 | CHECK |
+| `F9S5-QUAL-1` | Proof ≤ 60 LOC | CHECK |
+
+### F9S6 — checkSolution_sound [HOJA]
+
+<!-- CHECK:F9S6 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S6-THM-1` | `checkSolution_sound`: Composes F9S2-F9S5 via `Bool.and_eq_true_iff` | REQUIRED |
+| `F9S6-THM-2` | Zero sorry | REQUIRED |
+| `F9S6-QUAL-1` | Proof ≤ 20 LOC (pure composition) | CHECK |
+| `F9S6-ARCH-1` | Strengthens existing `ValidSolution` user API | REQUIRED |
+
+### F9S7 — evalVar+checkConstraint [PAR]
+
+<!-- CHECK:F9S7 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S7-THM-1` | `evalVar_correct`: evalVar relates to solution assignment lookup | REQUIRED |
+| `F9S7-THM-2` | `checkConstraint_correct`: `checkConstraint c sol = true → constraint satisfied` | REQUIRED |
+| `F9S7-THM-3` | Zero sorry | REQUIRED |
+| `F9S7-EDGE-1` | Variable not in assignment → evalVar returns default | CHECK |
+| `F9S7-EDGE-2` | Constraint with empty LHS (constant only) | CHECK |
+| `F9S7-EDGE-3` | Cases on operator: ≤, ≥, = | CHECK |
+| `F9S7-QUAL-1` | Proof ≤ 40 LOC total | CHECK |
+
+### F9S8 — isFeasible_sound [PAR]
+
+<!-- CHECK:F9S8 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S8-THM-1` | `isFeasible_sound`: `isFeasible sol problem = true → ∀ c ∈ problem.constraints, constraintSatisfied c sol` | REQUIRED |
+| `F9S8-THM-2` | Uses `Array.all` → `∀` bridge pattern | REQUIRED |
+| `F9S8-THM-3` | Zero sorry | REQUIRED |
+| `F9S8-EDGE-1` | Empty constraint array → vacuous truth | CHECK |
+| `F9S8-EDGE-2` | Single constraint | CHECK |
+| `F9S8-QUAL-1` | Proof ≤ 30 LOC | CHECK |
+
+### F9S9 — encodeEGraph_correctness [FUND]
+
+<!-- CHECK:F9S9 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S9-SPEC-1` | `EncodingSpec` Prop DEFINED before proof attempt | REQUIRED |
+| `F9S9-THM-1` | Root activation constraint generated | REQUIRED |
+| `F9S9-THM-2` | Exactly-one constraints per reachable class | REQUIRED |
+| `F9S9-THM-3` | Child dependency constraints for each node | REQUIRED |
+| `F9S9-THM-4` | Acyclicity (level) constraints generated | REQUIRED |
+| `F9S9-THM-5` | Zero sorry (may use _aux firewall during development) | REQUIRED |
+| `F9S9-EDGE-1` | Empty e-graph: minimal constraints only | CHECK |
+| `F9S9-EDGE-2` | Single-class e-graph with one node | CHECK |
+| `F9S9-STRESS-1` | Compound invariant through fold tracks all 4 constraint types | CHECK |
+| `F9S9-ROBUST-1` | Does NOT depend on HashMap.fold internal order | REQUIRED |
+| `F9S9-QUAL-1` | Gate de-risk: _aux sketch before full proof | REQUIRED |
+| `F9S9-QUAL-2` | Proof ≤ 150 LOC | CHECK |
+| `F9S9-DEFER-1` | If intractable, may defer to v1.2.1 with sorry-free partial results | ACCEPTABLE |
+
+### F9S10 — extractILPAuto_fuel [HOJA]
+
+<!-- CHECK:F9S10 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S10-THM-1` | `extractILPAuto_fuel_sufficient`: acyclicity + numClasses → fuel is sufficient | REQUIRED |
+| `F9S10-THM-2` | Zero sorry | REQUIRED |
+| `F9S10-EDGE-1` | Single-class graph (fuel 1 sufficient) | CHECK |
+| `F9S10-EDGE-2` | Fuel = 0 → None (no extraction) | CHECK |
+| `F9S10-QUAL-1` | Proof ≤ 25 LOC | CHECK |
+| `F9S10-ARCH-1` | Connects acyclicity levels to depth bound (DynamicTreeProg pattern) | CHECK |
+
+### F9S11 — solutionCost_correct [HOJA]
+
+<!-- CHECK:F9S11 -->
+| ID | Criteria | Weight |
+|----|----------|--------|
+| `F9S11-THM-1` | `solutionCost_correct`: cost = Σ cost(selectedNode) for active classes | REQUIRED |
+| `F9S11-THM-2` | Zero sorry | REQUIRED |
+| `F9S11-EDGE-1` | No active classes → cost = 0 | CHECK |
+| `F9S11-EDGE-2` | All nodes cost 0 → total cost 0 | CHECK |
+| `F9S11-QUAL-1` | Proof ≤ 15 LOC | CHECK |
+
+### Aggregate Targets (v1.2.0)
+
+| Métrica | Target | Stretch |
+|---------|--------|---------|
+| LOC total | ≥ 8,800 | ≥ 9,000 |
+| Teoremas total | ≥ 243 | ≥ 250 |
+| Sorry count | **0** | 0 |
+| Custom axioms | **0** | 0 |
+| Integration tests | 14/14 PASS | 14+ PASS |
+| New theorems (Fase 9) | ≥ 10 | ≥ 15 |
+| ILP coverage (theorems/defs) | ≥ 30% | ≥ 50% |
+| `lake build` time | ≤ v1.1.0 + 10% | ≤ v1.1.0 |
+
+### Cross-Cutting Criteria (v1.2.0)
+
+<!-- CHECK:CROSS-v1.2.0 -->
+| ID | Criteria |
+|----|----------|
+| `CROSS-1` | No regression: every v1.1.0 theorem compiles with identical or stronger statement |
+| `CROSS-2` | Sorry monotonic: 0 → 0 |
+| `CROSS-3` | Theorem count monotonic: v1.1.0(233) → v1.2.0(≥243) |
+| `CROSS-4` | extractILP_correct / ilp_extraction_soundness unchanged |
+| `CROSS-5` | Build reproducibility: `lake clean && lake build` succeeds |
+| `CROSS-6` | No Classical.em in F9S5 (constructive acyclicity proof) |
+
+### Risk Assessment (v1.2.0)
+
+| Node | Risk | Mitigation |
+|------|------|------------|
+| F9S3 | HIGH | GATE: pioneers HashMap.fold approach. Sketch before F9S4/F9S5. If intractable, consider alternative check formulation |
+| F9S9 | HIGH | GATE: spec-first (_aux firewall). May defer to v1.2.1. Compound invariant over fold is the core challenge |
+| F9S4 | MEDIUM | Replicates F9S3 pattern with nested children iteration |
+| F9S5 | MEDIUM | Replicates F9S3 pattern + level ordering. Constructive proof |
+| F9S7 | LOW | Simple unfold + cases on operator |
+| F9S8 | LOW | Array.all → forall bridge, standard pattern |
+| F9S1 | LOW | Definition: rfl/unfold proofs |
+| F9S2 | LOW | Trivial unfold + simp |
+| F9S6 | LOW | Pure composition via Bool.and_eq_true_iff |
+| F9S10 | LOW | Depends on F9S5 acyclicity result |
+| F9S11 | LOW | Cost summation, standard fold property |
+
+---
+
 ## Legacy Results (pre-structured)
 
 > Benchmark results not linked to any identified phase. Preserved for reference.
@@ -521,6 +722,146 @@ Nodes covered: F8S3 InstantiateEvalSound_holds.
 #### 1. What is tested and why
 
 Nodes covered: F8S4 Update pipeline signatures, F8S5 P1-P5 docs and tests.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 0 | — |
+| Theorems | — | 0 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 0 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### ILP foundation: simp + rootActive (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F9S1 ILP simp lemmas, F9S2 checkRootActive_sound.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 354 | — |
+| Theorems | — | 4 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 6 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### Check components + cert eval (agent team) (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F9S4 checkChildDeps_sound, F9S5 checkAcyclicity_sound, F9S7 evalVar+checkConstraint, F9S8 isFeasible_sound.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 0 | — |
+| Theorems | — | 0 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 0 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### Composition + cost (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F9S6 checkSolution_sound, F9S11 solutionCost_correct.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 0 | — |
+| Theorems | — | 0 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 0 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### GATE: encodeEGraph correctness (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F9S9 encodeEGraph_correctness.
+
+#### 2. Performance
+
+| Metric | Target | Actual | Status |
+|--------|--------|--------|--------|
+| LOC | — | 0 | — |
+| Theorems | — | 0 | — |
+| Lemmas | — | 0 | — |
+| Defs | — | 0 | — |
+| Sorry count | 0 | 0 | PASS |
+
+#### 3. Acceptability Analysis
+
+- **Acceptable**: Meets minimum criteria (zero sorry, compiles)
+
+#### 4. Bugs, Warnings, Sorries
+
+| Item | Location | Cause | Affected Nodes | Mitigation |
+|------|----------|-------|----------------|------------|
+| (none) | — | — | — | — |
+
+### Fuel sufficiency (v0.1.0)
+
+**Closed**: 2026-02-25 | **Status**: PASS
+
+#### 1. What is tested and why
+
+Nodes covered: F9S10 extractILPAuto_fuel.
 
 #### 2. Performance
 

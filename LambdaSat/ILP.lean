@@ -141,7 +141,32 @@ def getSelectedNodeIdx (sol : ILPSolution) (classId : EClassId) : Option Nat :=
 def getLevel (sol : ILPSolution) (classId : EClassId) : Nat :=
   sol.levels.get? classId |>.getD 0
 
+-- ── Simp lemmas ──────────────────────────────────────────────────
+
+/-- `isActive` unfolds to `activatedClasses.get?` with default `false`. -/
+@[simp] theorem isActive_def (sol : ILPSolution) (classId : EClassId) :
+    sol.isActive classId = (sol.activatedClasses.get? classId |>.getD false) := rfl
+
+/-- `getSelectedNodeIdx` unfolds to conditional lookup on `selectedNodes`. -/
+@[simp] theorem getSelectedNodeIdx_def (sol : ILPSolution) (classId : EClassId) :
+    sol.getSelectedNodeIdx classId =
+      if sol.isActive classId then sol.selectedNodes.get? classId else none := rfl
+
+/-- `getLevel` unfolds to `levels.get?` with default `0`. -/
+@[simp] theorem getLevel_def (sol : ILPSolution) (classId : EClassId) :
+    sol.getLevel classId = (sol.levels.get? classId |>.getD 0) := rfl
+
 end ILPSolution
+
+namespace ILPProblem
+
+/-- `numVars` unfolds to `bounds.size`. -/
+@[simp] theorem numVars_def (p : ILPProblem) : p.numVars = p.bounds.size := rfl
+
+/-- `numConstraints` unfolds to `constraints.size`. -/
+@[simp] theorem numConstraints_def (p : ILPProblem) : p.numConstraints = p.constraints.size := rfl
+
+end ILPProblem
 
 -- ══════════════════════════════════════════════════════════════════
 -- Solver Configuration

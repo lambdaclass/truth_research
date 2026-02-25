@@ -130,4 +130,22 @@ def solutionCost (g : EGraph Op) (sol : ILPSolution)
 @[simp] theorem extractILP_zero (g : EGraph Op) (sol : ILPSolution) (id : EClassId) :
     extractILP (Expr := Expr) g sol id 0 = none := rfl
 
+set_option linter.unusedSectionVars false in
+/-- `solutionCost` unfolds to its fold definition. -/
+@[simp] theorem solutionCost_unfold (g : EGraph Op) (sol : ILPSolution)
+    (costFn : ENode Op → Nat) :
+    solutionCost g sol costFn =
+      g.classes.fold (init := 0) fun acc classId eclass =>
+        match sol.selectedNodes.get? classId with
+        | none => acc
+        | some idx =>
+          if h : idx < eclass.nodes.size then acc + costFn eclass.nodes[idx]
+          else acc := rfl
+
+set_option linter.unusedSectionVars false in
+/-- `solutionCost` is nonnegative (trivially, since it returns `Nat`). -/
+theorem solutionCost_nonneg (g : EGraph Op) (sol : ILPSolution)
+    (costFn : ENode Op → Nat) :
+    0 ≤ solutionCost g sol costFn := Nat.zero_le _
+
 end LambdaSat.ILP
