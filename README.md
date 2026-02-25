@@ -2,7 +2,7 @@
 
 Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 248 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
 
-Generalized from [VR1CS-Lean](https://github.com/manuelpuebla/vr1cs-lean) v1.3.0.
+Generalized from [VR1CS-Lean](https://github.com/manuel0921/vr1cs-lean) v1.3.0.
 
 ---
 
