@@ -1,6 +1,6 @@
 # LambdaSat
 
-Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 233 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
+Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 248 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
 
 Generalized from [VR1CS-Lean](https://github.com/manuelpuebla/vr1cs-lean) v1.3.0.
 
@@ -170,10 +170,10 @@ LambdaSat/
 │   ├── ExtractSpec.lean            -- extractF_correct, extractAuto_correct
 │   ├── Optimize.lean               -- Saturation + extraction pipelines
 │   ├── ILP.lean                    -- ILP types and data structures
-│   ├── ILPEncode.lean              -- E-graph → ILP encoding
+│   ├── ILPEncode.lean              -- E-graph → ILP encoding + encoding properties (5 theorems) ← v1.2.0
 │   ├── ILPSolver.lean              -- HiGHS external + branch-and-bound solver
 │   ├── ILPCheck.lean               -- Certificate checking + verified extraction
-│   ├── ILPSpec.lean                -- extractILP_correct, ilp_extraction_soundness
+│   ├── ILPSpec.lean                -- ILP soundness: check*_sound, extractILP_correct, fuel_mono (12 theorems) ← v1.2.0
 │   ├── ParallelMatch.lean          -- IO.asTask parallel e-matching
 │   ├── ParallelSaturate.lean       -- Parallel saturation with threshold fallback
 │   └── TranslationValidation.lean  -- ProofWitness, full_pipeline_soundness (8 theorems)
@@ -222,5 +222,6 @@ Outside the TCB:
 | Fase 6: Close Rebuild Sorry | Complete | SemanticHashconsInv + rebuildStepBody_preserves_triple — zero sorry |
 | Fase 7: ematchF Soundness | Complete | Pattern.eval, ematchF_sound, full_pipeline_soundness_internal — eliminates PreservesCV |
 | Fase 8: Discharge Hypotheses | Complete | InstantiateEvalSound_holds, ematchF_substitution_bounded, full_pipeline_soundness — zero external hypotheses |
+| Fase 9: ILP Certificate Verification | Complete | checkSolution soundness, encoding properties, extractILP fuel monotonicity (15 new theorems) |
 
-**Current version: v1.1.0** — 233 theorems, 8,622 LOC, **0 sorry**, zero custom axioms, **zero external hypotheses** in `full_pipeline_soundness`.
+**Current version: v1.2.0** — 248 theorems, 8,956 LOC, **0 sorry**, zero custom axioms, **zero external hypotheses** in `full_pipeline_soundness`.
