@@ -1,4 +1,4 @@
-# LambdaSat-Lean Benchmarks (v0.2.0)
+# OptiSat Benchmarks (v0.2.0)
 
 ## Criteria (v0.1.0)
 
@@ -655,9 +655,9 @@
 | Tests | 8 | 8/8 PASS | **PASS** |
 | `lake build` | < 120s | 20 jobs OK | **PASS** |
 
-### VR1CS-Lean vs LambdaSat-Lean Comparison
+### VR1CS-Lean vs OptiSat Comparison
 
-| Métrica | VR1CS-Lean | LambdaSat-Lean | Delta |
+| Métrica | VR1CS-Lean | OptiSat | Delta |
 |---------|-----------|----------------|-------|
 | LOC (e-graph) | 7,435 | 5,926 | -20.3% |
 | Teoremas | 158 | 181 | +14.6% |

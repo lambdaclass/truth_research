@@ -1,14 +1,14 @@
-# Test Specifications: LambdaSat v1.2.0
+# Test Specifications: OptiSat v1.2.0
 
 Generated: 2026-02-25 (manual — Gemini unavailable)
-Project: /Users/manuelpuebla/Documents/claudio/lambdasat-lean
+Project: /Users/manuelpuebla/Documents/claudio/optisat
 Toolchain: leanprover/lean4:v4.26.0
 Mathlib: no
 
 > **Este archivo es leído por otra sesión de Claude Code que escribe
 > los archivos .lean de test. NO contiene código compilable.**
 >
-> LambdaSat es self-contained (sin Mathlib). Las propiedades SlimCheck
+> OptiSat es self-contained (sin Mathlib). Las propiedades SlimCheck
 > requieren agregar `import Mathlib.Testing.SlimCheck` + implementar
 > `SampleableExt`/`Shrinkable` para tipos custom (`EGraph`, `Pattern`, etc.).
 > Todas las propiedades están marcadas `NOT_YET_RUNNABLE` salvo las que
@@ -651,7 +651,7 @@ Los 23 tests de `Tests/IntegrationTests.lean` ya cubren:
 
 ### Nota sobre SlimCheck
 
-LambdaSat es self-contained (sin Mathlib). Para implementar las 32 propiedades SlimCheck:
+OptiSat es self-contained (sin Mathlib). Para implementar las 32 propiedades SlimCheck:
 1. Agregar `require mathlib from ...` a lakefile.toml
 2. Implementar `SampleableExt` para: `EGraph ArithOp`, `ILPSolution`, `Pattern ArithOp`, `Substitution`
 3. Implementar `Shrinkable` para los mismos tipos

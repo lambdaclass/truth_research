@@ -1,10 +1,10 @@
 ---
-title: "LambdaSat-Lean: A Fully Verified Equality Saturation Engine"
+title: "OptiSat: A Fully Verified Equality Saturation Engine"
 subtitle: "From zero sorry to zero hypotheses — how a typeclass-parameterized e-graph in Lean 4 answers the open problems in verified program optimization"
 author: "Manuel Puebla"
 date: "February 2026"
 abstract: |
-  This document presents LambdaSat-Lean, the first formally verified, complete equality saturation engine implemented entirely within a proof assistant. Written in Lean 4 with zero sorry, zero custom axioms, and zero external hypotheses in its final pipeline theorem, LambdaSat-Lean provides a domain-agnostic e-graph parameterized by typeclasses that can be instantiated for circuits, tensors, SQL queries, or any first-order rewriting system. We describe how the project evolved through nine phases — from a foundation with an isolated sorry to a fully self-contained soundness proof — and how each phase responds to open challenges identified by four independent lines of academic research: isolated Union-Find verification (Charguéraud, Stevens), semantic foundations of e-graphs (Suciu, Zakhour), integration with proof assistants (Rossel/lean-egg), and unverified optimal extraction (Yang/TENSAT). The result is 248 machine-checked theorems in 8,956 lines of code, with a three-path soundness chain culminating in `full_pipeline_soundness`: for any expression, any set of sound rewrite rules, and any initial e-graph satisfying structural invariants, the optimized expression evaluates identically to the original.
+  This document presents OptiSat, the first formally verified, complete equality saturation engine implemented entirely within a proof assistant. Written in Lean 4 with zero sorry, zero custom axioms, and zero external hypotheses in its final pipeline theorem, OptiSat provides a domain-agnostic e-graph parameterized by typeclasses that can be instantiated for circuits, tensors, SQL queries, or any first-order rewriting system. We describe how the project evolved through nine phases — from a foundation with an isolated sorry to a fully self-contained soundness proof — and how each phase responds to open challenges identified by four independent lines of academic research: isolated Union-Find verification (Charguéraud, Stevens), semantic foundations of e-graphs (Suciu, Zakhour), integration with proof assistants (Rossel/lean-egg), and unverified optimal extraction (Yang/TENSAT). The result is 248 machine-checked theorems in 8,956 lines of code, with a three-path soundness chain culminating in `full_pipeline_soundness`: for any expression, any set of sound rewrite rules, and any initial e-graph satisfying structural invariants, the optimized expression evaluates identically to the original.
 geometry: margin=2.5cm
 documentclass: article
 fontsize: 11pt
@@ -26,11 +26,11 @@ The dominant technique for optimizing term-rewriting systems is **Equality Satur
 
 The problem is that **no existing implementation of this technique is formally verified**. Neither `egg` (Rust), nor `egglog` (Rust), nor `lean-egg` (Lean + Rust via FFI) carry machine-checked proofs that the engine preserves semantics. They rely on the code being well-written, but no one has *proven* it.
 
-LambdaSat-Lean is the first project to provide that proof — completely, within a single proof assistant, with no external dependencies.
+OptiSat is the first project to provide that proof — completely, within a single proof assistant, with no external dependencies.
 
-# What LambdaSat-Lean is
+# What OptiSat is
 
-LambdaSat-Lean is a **generic, formally verified equality saturation engine** implemented in Lean 4. It is:
+OptiSat is a **generic, formally verified equality saturation engine** implemented in Lean 4. It is:
 
 - **Typeclass-parameterized**: the engine is agnostic to the domain. Users provide `NodeOps`, `NodeSemantics`, and `Extractable` instances for their operator type, and the entire verification stack transfers.
 - **Self-contained**: no Mathlib dependency, no FFI, no external runtime. The only trusted component is the Lean 4 kernel.
@@ -92,13 +92,13 @@ This forces a design where the Rust runtime is part of the **trusted computing b
 
 **The problem**: the ILP formulation correctly encodes the extraction problem (by construction of the constraints), but the **extracted expression is never verified** against the original. Correctness depends on trusting the solver and its decoding. If the solver has a numerical bug or the decoding is incorrect, no one detects it.
 
-# How LambdaSat-Lean responds to each group
+# How OptiSat responds to each group
 
 ## Response to Group A (Charguéraud, Stevens): integration matters
 
 Charguéraud and Stevens verified Union-Find in isolation. We verified it **integrated within a larger system**.
 
-In LambdaSat-Lean, `UnionFind.lean` (1,235 lines, 44 theorems) contains a Union-Find with path compression. But the key difference is that its invariants do not stay there: they *propagate* through five layers of abstraction until reaching the final pipeline soundness theorem.
+In OptiSat, `UnionFind.lean` (1,235 lines, 44 theorems) contains a Union-Find with path compression. But the key difference is that its invariants do not stay there: they *propagate* through five layers of abstraction until reaching the final pipeline soundness theorem.
 
 The formal dependency chain is:
 
@@ -121,7 +121,7 @@ The bridge is the `ConsistentValuation` invariant, which has two conditions:
 1. **UF consistency**: if two IDs have the same root in the Union-Find, they have the same semantic value. This corresponds to Zakhour's RSTC closure.
 2. **Node consistency**: every node in every class evaluates to the value of its class. This corresponds to the transitions of Suciu's tree automaton.
 
-| Theoretical concept | Mechanization in LambdaSat-Lean |
+| Theoretical concept | Mechanization in OptiSat |
 |---|---|
 | Tree automaton run (Suciu) | `v : EClassId → Val` in `ConsistentValuation` |
 | Transition consistency (Suciu) | Condition (2): `evalOp(n, env, v) = v(c)` |
@@ -130,7 +130,7 @@ The bridge is the `ConsistentValuation` invariant, which has two conditions:
 | Fixed point (Suciu) | `saturateF` terminates (bounded) preserving CV |
 | Extraction correctness | `extractF_correct` / `extractILP_correct` |
 
-Where Suciu speaks theoretically of fixed points, LambdaSat-Lean proves in Lean that its `saturateF` function reaches a bounded state preserving `ConsistentValuation`. Where Zakhour formalizes RSTC closure on paper, our theorem `sound_rule_preserves_consistency` mechanizes it computationally.
+Where Suciu speaks theoretically of fixed points, OptiSat proves in Lean that its `saturateF` function reaches a bounded state preserving `ConsistentValuation`. Where Zakhour formalizes RSTC closure on paper, our theorem `sound_rule_preserves_consistency` mechanizes it computationally.
 
 ## Response to Group C (Rossel/lean-egg): the verified engine is practical
 
@@ -144,7 +144,7 @@ This is perhaps our most direct response. Rossel states that implementing a veri
 
 The central architectural idea that makes this feasible is **fuel-based recursion**: instead of using well-founded recursion (which in Lean 4 requires proving termination within the definition — extremely difficult when termination depends on runtime invariants), every recursive function takes an explicit `fuel : Nat` parameter, and separate theorems prove that sufficient fuel always exists.
 
-This eliminates the need for **proof reconstruction**. lean-egg must reconstruct Lean proofs from the explanation traces that `egg` generates — a complex and fragile process that must handle binders, type classes, and definitional equality. LambdaSat-Lean never leaves the verified world: the engine *preserves correctness by construction*.
+This eliminates the need for **proof reconstruction**. lean-egg must reconstruct Lean proofs from the explanation traces that `egg` generates — a complex and fragile process that must handle binders, type classes, and definitional equality. OptiSat never leaves the verified world: the engine *preserves correctness by construction*.
 
 ## Response to Group D (Yang/TENSAT): verified ILP extraction
 
@@ -171,7 +171,7 @@ The composition `checkSolution_sound` joins all four via `Bool.and_eq_true_iff`.
 
 # The evolution: from one sorry to zero hypotheses
 
-LambdaSat-Lean did not arrive at its current state in a single step. The journey through nine phases illustrates how formal verification proceeds incrementally, with each phase closing a specific gap.
+OptiSat did not arrive at its current state in a single step. The journey through nine phases illustrates how formal verification proceeds incrementally, with each phase closing a specific gap.
 
 ## Phase 1–4: Foundation (v0.1.0)
 
@@ -247,7 +247,7 @@ The core challenge was reasoning about `HashMap.fold` — a function whose itera
 
 # The three soundness paths
 
-LambdaSat-Lean maintains three parallel soundness chains, each valid at a different level of assumptions:
+OptiSat maintains three parallel soundness chains, each valid at a different level of assumptions:
 
 ```
 Path A (v0.3.0 — with PreservesCV assumption):
@@ -277,7 +277,7 @@ Path A is available for users who already have `PreservesCV` proofs (backward co
 
 # The four-tier invariant system
 
-A central design decision in LambdaSat-Lean is the use of **four progressively weaker invariants** that track exactly which properties hold at each phase of e-graph mutation:
+A central design decision in OptiSat is the use of **four progressively weaker invariants** that track exactly which properties hold at each phase of e-graph mutation:
 
 | Invariant | When it holds | What it guarantees |
 |---|---|---|
@@ -290,7 +290,7 @@ This is more nuanced than a single "well-formed" predicate. During `merge`, we t
 
 # Typeclass architecture and generalizability
 
-LambdaSat-Lean is parameterized over three typeclasses:
+OptiSat is parameterized over three typeclasses:
 
 ```lean
 class NodeOps (Op : Type) where
@@ -309,7 +309,7 @@ class Extractable (Op : Type) (Expr : Type) extends NodeOps Op where
   reconstruct : Op → List Expr → Option Expr
 ```
 
-The entire verification stack (248 theorems) transfers to any instantiation. To use LambdaSat-Lean for a new domain, one provides: (1) an inductive operator type, (2) instances of the three typeclasses, and (3) rewrite rules with their soundness proofs.
+The entire verification stack (248 theorems) transfers to any instantiation. To use OptiSat for a new domain, one provides: (1) an inductive operator type, (2) instances of the three typeclasses, and (3) rewrite rules with their soundness proofs.
 
 Potential instantiations:
 
@@ -353,7 +353,7 @@ The critical point: a bug in the engine is *impossible* without a `sorry` — an
 
 # Comparison with egg and lean-egg
 
-LambdaSat-Lean and `egg` do not compete — they **complement** each other. They operate at different points of the design space, solve different problems, and have opposite strengths.
+OptiSat and `egg` do not compete — they **complement** each other. They operate at different points of the design space, solve different problems, and have opposite strengths.
 
 ## What each project is
 
@@ -361,11 +361,11 @@ LambdaSat-Lean and `egg` do not compete — they **complement** each other. They
 
 **lean-egg** (Rossel et al., POPL 2026) is a **tactic for Lean 4** for equational reasoning. When a user writes a proof and needs to show that `a + b + c = c + b + a`, lean-egg applies rewrite rules automatically via e-graphs to find the equivalence chain. It uses `egg` as a backend via FFI and reconstructs Lean proofs from the explanations.
 
-**LambdaSat-Lean** is a **verified optimization engine**. It takes an expression, explores all equivalent forms via e-graphs, and extracts the cheapest one. It is not a proof tactic — it is a tool that transforms programs with total formal guarantee.
+**OptiSat** is a **verified optimization engine**. It takes an expression, explores all equivalent forms via e-graphs, and extracts the cheapest one. It is not a proof tactic — it is a tool that transforms programs with total formal guarantee.
 
 ## The fundamental architectural difference
 
-lean-egg leaves Lean, delegates the heavy work to Rust, and reconstructs the proof on return. LambdaSat-Lean never leaves Lean.
+lean-egg leaves Lean, delegates the heavy work to Rust, and reconstructs the proof on return. OptiSat never leaves Lean.
 
 lean-egg has three phases:
 
@@ -373,7 +373,7 @@ lean-egg has three phases:
 2. `egg` saturates the e-graph and produces explanations.
 3. Lean reconstructs a formal proof from those explanations.
 
-LambdaSat-Lean operates in a single verified phase:
+OptiSat operates in a single verified phase:
 
 1. The expression is inserted into the verified e-graph.
 2. Saturation with verified rules (each rule carries its soundness proof).
@@ -393,7 +393,7 @@ lean-egg trusts:
 
 If `egg` has a bug in merge, congruence closure, or explanation generation, lean-egg inherits that bug. Proof reconstruction is a safety net: if reconstruction fails, the tactic fails. But it cannot detect bugs that produce *plausible but incorrect* explanations.
 
-LambdaSat-Lean trusts only the Lean 4 kernel. No external code. A bug in the engine is impossible without a `sorry` — and there are zero.
+OptiSat trusts only the Lean 4 kernel. No external code. A bug in the engine is impossible without a `sorry` — and there are zero.
 
 ### 2. What each can handle
 
@@ -406,7 +406,7 @@ lean-egg handles general Lean expressions:
 
 This is powerful but complex. Rossel had to solve how to encode Lean's rich semantics into `egg`'s first-order terms, and how to reconstruct proofs that respect all these subtleties.
 
-LambdaSat-Lean handles only first-order terms:
+OptiSat handles only first-order terms:
 
 - Operators with fixed arity (`add(a, b)`, `mul(a, b)`, `const(5)`)
 - No binders, no type classes, no dependent types
@@ -417,23 +417,23 @@ This is a real limitation: it cannot be used as a general Lean tactic. But for f
 
 lean-egg: *conditional guarantee*. If proof reconstruction succeeds, the equivalence is correct. If it fails (due to a bug in `egg`, or limitations of the reconstruction), the tactic reports an error. The user knows that it either works or fails — it never produces an incorrect proof. But the reconstruction effort is significant and there are corner cases.
 
-LambdaSat-Lean: *unconditional guarantee*. The type of `full_pipeline_soundness` says that for *every* expression and *every* environment, the optimized result evaluates identically to the original. This holds by construction — there is no reconstruction that might fail. But it only holds for domains within the first-order typeclass interface.
+OptiSat: *unconditional guarantee*. The type of `full_pipeline_soundness` says that for *every* expression and *every* environment, the optimized result evaluates identically to the original. This holds by construction — there is no reconstruction that might fail. But it only holds for domains within the first-order typeclass interface.
 
 ### 4. Performance
 
 lean-egg benefits from Rust's native performance. `egg` is highly optimized with imperative arrays, union-by-rank, and efficient hashing. It can handle e-graphs with millions of nodes.
 
-LambdaSat-Lean uses Lean's functional arrays (`Array.set`, which is $O(\log n)$ amortized vs $O(1)$ imperative). It is sufficient for circuits (up to ~2,000 constraints with Pedersen), but would not scale to SMT solving workloads.
+OptiSat uses Lean's functional arrays (`Array.set`, which is $O(\log n)$ amortized vs $O(1)$ imperative). It is sufficient for circuits (up to ~2,000 constraints with Pedersen), but would not scale to SMT solving workloads.
 
 ### 5. Purpose
 
 lean-egg is a *tactic*: its user is someone writing a proof in Lean who wants to automate equational rewriting steps.
 
-LambdaSat-Lean is an *optimizer*: its user is someone who wants to transform a program (circuit, query, etc.) to a cheaper equivalent version, with formal guarantee that the transformation is correct.
+OptiSat is an *optimizer*: its user is someone who wants to transform a program (circuit, query, etc.) to a cheaper equivalent version, with formal guarantee that the transformation is correct.
 
 ## Full comparison table
 
-| Aspect | egg / lean-egg | LambdaSat-Lean |
+| Aspect | egg / lean-egg | OptiSat |
 |---|---|---|
 | Language | Rust (+ Lean FFI) | Pure Lean 4 |
 | Trusted computing base | egg runtime + FFI | Lean 4 kernel only |
@@ -453,23 +453,23 @@ LambdaSat-Lean is an *optimizer*: its user is someone who wants to transform a p
 | Scenario | Best option |
 |---|---|
 | Lean tactic for general rewriting (binders, HoL) | lean-egg |
-| ZK circuit optimization (safety-critical) | LambdaSat-Lean |
+| ZK circuit optimization (safety-critical) | OptiSat |
 | SMT solving at massive scale | egg |
-| Verified compiler (CompCert-style) | LambdaSat-Lean |
+| Verified compiler (CompCert-style) | OptiSat |
 | Rapid prototyping of optimizations | egg |
-| Academic publication with verified artifact | LambdaSat-Lean |
-| Hardware RTL optimization | LambdaSat-Lean |
+| Academic publication with verified artifact | OptiSat |
+| Hardware RTL optimization | OptiSat |
 
 ## Toward a future synthesis
 
-The most interesting integration scenario: lean-egg could replace its Rust backend (`egg`) with LambdaSat-Lean, eliminating the FFI and the Rust TCB. The result would be a Lean tactic with:
+The most interesting integration scenario: lean-egg could replace its Rust backend (`egg`) with OptiSat, eliminating the FFI and the Rust TCB. The result would be a Lean tactic with:
 
 - Zero external TCB (no more FFI, no more Rust)
 - Formally guaranteed engine correctness
 - lean-egg's tactic interface (usability)
-- LambdaSat-Lean's verification (confidence)
+- OptiSat's verification (confidence)
 
-The obstacle: LambdaSat-Lean would need to be extended to handle the higher-order representation that lean-egg currently delegates to `egg`. This is non-trivial future work, but the typeclass architecture makes it possible without breaking existing theorems.
+The obstacle: OptiSat would need to be extended to handle the higher-order representation that lean-egg currently delegates to `egg`. This is non-trivial future work, but the typeclass architecture makes it possible without breaking existing theorems.
 
 # Version history
 
@@ -486,16 +486,16 @@ The obstacle: LambdaSat-Lean would need to be extended to handle the higher-orde
 
 The academic community identified four open problems: isolated Union-Find verification (Charguéraud, Stevens), semantic foundations without mechanization (Suciu, Zakhour), the supposed impracticality of a verified engine (Rossel), and optimal extraction without verification (Yang/TENSAT).
 
-LambdaSat-Lean resolves all four simultaneously: a complete equality saturation engine, generic, formally verified in Lean 4, with integrated Union-Find, mechanized semantics, ILP extraction with verified certificate, and zero `sorry`.
+OptiSat resolves all four simultaneously: a complete equality saturation engine, generic, formally verified in Lean 4, with integrated Union-Find, mechanized semantics, ILP extraction with verified certificate, and zero `sorry`.
 
 The evolution from v0.1.0 to v1.2.0 demonstrates that formal verification of complex systems is not only possible but can proceed incrementally: each phase closes a specific gap (a sorry, a user assumption, an unverified component) while maintaining full backward compatibility. The result is 248 machine-checked theorems that collectively state: **for any expression, any set of sound rewrite rules, and any initial e-graph satisfying structural invariants, the optimized expression evaluates identically to the original**.
 
-This is not an academic exercise. Instantiated for R1CS circuits via VR1CS-Lean, LambdaSat-Lean matches the production `circom -O2` optimizer on 9 of 10 real circuits, while providing a formal guarantee that no other circuit optimizer offers — that an unsound transformation is *mathematically impossible*.
+This is not an academic exercise. Instantiated for R1CS circuits via VR1CS-Lean, OptiSat matches the production `circom -O2` optimizer on 9 of 10 real circuits, while providing a formal guarantee that no other circuit optimizer offers — that an unsound transformation is *mathematically impossible*.
 
 \vspace{1em}
 \noindent\textbf{Artifacts.}
 
-\noindent LambdaSat-Lean: \url{https://github.com/Manuel0921/lambdasat-lean}
+\noindent OptiSat: \url{https://github.com/Manuel0921/optisat}
 
 \noindent VR1CS-Lean: \url{https://github.com/Manuel0921/vr1cs-lean}
 

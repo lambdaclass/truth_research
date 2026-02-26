@@ -1,4 +1,4 @@
-# LambdaSat-Lean: Architecture
+# OptiSat: Architecture
 
 ## Current Version: v0.2.0
 
@@ -168,7 +168,7 @@
 
 ### Fase 7: ematchF Soundness (v1.0.0) — PLANNED
 
-**Contents**: Pattern.eval denotational semantics, ematchF_sound theorem (if ematchF returns σ, Pattern.eval under σ = v(classId)), applyRuleF_preserves_cv_internal without PreservesCV assumption, strongest pipeline soundness. LambdaSat becomes first formally verified complete equality saturation motor.
+**Contents**: Pattern.eval denotational semantics, ematchF_sound theorem (if ematchF returns σ, Pattern.eval under σ = v(classId)), applyRuleF_preserves_cv_internal without PreservesCV assumption, strongest pipeline soundness. OptiSat becomes first formally verified complete equality saturation motor.
 
 **Key innovation**: `Pattern.eval pat env v subst` gives semantic value of pattern under substitution. `ematchF_sound` proves the motor finds only valid matches. Eliminates user burden of providing `PreservesCV` proofs.
 
@@ -237,7 +237,7 @@
 
 **hematch_bnd**: Inducción sobre Pattern + fuel. `ematchF` es read-only. Cada σ.get? retorna IDs del grafo existente (< g.uf.size). Reutiliza `matchChildren_sound` (ya probado).
 
-**P2 (SlimCheck)**: Deferred a v1.2.0 — requiere Mathlib dependency, LambdaSat es self-contained. Documentado en README.
+**P2 (SlimCheck)**: Deferred a v1.2.0 — requiere Mathlib dependency, OptiSat es self-contained. Documentado en README.
 
 ---
 

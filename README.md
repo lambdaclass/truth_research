@@ -1,6 +1,6 @@
-# LambdaSat
+# OptiSat
 
-Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. LambdaSat provides a domain-agnostic e-graph with 248 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
+Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. OptiSat provides a domain-agnostic e-graph with 248 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem.
 
 Generalized from [VR1CS-Lean](https://github.com/manuel0921/vr1cs-lean) v1.3.0.
 
@@ -10,7 +10,7 @@ Generalized from [VR1CS-Lean](https://github.com/manuel0921/vr1cs-lean) v1.3.0.
 
 Equality saturation is a program optimization technique that explores an exponential space of equivalent programs simultaneously. Most implementations are unverified — if the e-graph engine has a bug, the optimizer silently produces wrong results.
 
-LambdaSat proves, in Lean 4, that every step of the equality saturation pipeline preserves semantic equivalence:
+OptiSat proves, in Lean 4, that every step of the equality saturation pipeline preserves semantic equivalence:
 
 ```lean
 -- Merging equivalent classes preserves all valuations
@@ -44,7 +44,7 @@ theorem full_pipeline_soundness (g : EGraph Op)
 
 ## Typeclass architecture
 
-LambdaSat is parameterized over three typeclasses. To use it for a new domain, implement these:
+OptiSat is parameterized over three typeclasses. To use it for a new domain, implement these:
 
 ```lean
 -- 1. Define node structure
@@ -112,7 +112,7 @@ Four-tier invariant system:
 
 ```bash
 git clone <repo>
-cd lambdasat-lean
+cd optisat
 lake build
 ```
 
@@ -122,7 +122,7 @@ Run integration tests:
 lake env lean Tests/IntegrationTests.lean
 ```
 
-No Mathlib dependency — LambdaSat is self-contained.
+No Mathlib dependency — OptiSat is self-contained.
 
 ---
 
@@ -154,7 +154,7 @@ let result : Option ArithExpr := extractAuto g4 addId
 ## File structure
 
 ```
-LambdaSat/
+OptiSat/
 ├── LambdaSat/
 │   ├── UnionFind.lean              -- Union-Find with path compression (44 theorems)
 │   ├── Core.lean                   -- EGraph Op [NodeOps Op]: add, merge, rebuild
@@ -188,7 +188,7 @@ LambdaSat/
 
 ## Extraction modes
 
-LambdaSat supports two extraction strategies, both with verified soundness:
+OptiSat supports two extraction strategies, both with verified soundness:
 
 | Mode | Strategy | Theorem | TCB |
 |------|----------|---------|-----|
@@ -202,7 +202,7 @@ The ILP solver (HiGHS or built-in branch-and-bound) is outside the TCB — its o
 The soundness guarantee depends only on:
 
 1. **Lean 4 kernel** — type-checks all proofs
-2. **Typeclass instances** — users must correctly implement `NodeOps`, `NodeSemantics`, `Extractable` for their domain. LambdaSat proves that *given correct instances*, the pipeline is sound.
+2. **Typeclass instances** — users must correctly implement `NodeOps`, `NodeSemantics`, `Extractable` for their domain. OptiSat proves that *given correct instances*, the pipeline is sound.
 
 Outside the TCB:
 - **ILP solver** (HiGHS/B&B): certificate-checked by `checkSolution`
@@ -225,3 +225,4 @@ Outside the TCB:
 | Fase 9: ILP Certificate Verification | Complete | checkSolution soundness, encoding properties, extractILP fuel monotonicity (15 new theorems) |
 
 **Current version: v1.2.0** — 248 theorems, 8,956 LOC, **0 sorry**, zero custom axioms, **zero external hypotheses** in `full_pipeline_soundness`.
+
