@@ -17,10 +17,19 @@
   - ILPSolver: HiGHS external + pure Lean B&B solvers
   - ILPCheck: ILP certificate checking + ILP-guided extraction
   - ILPSpec: ILP extraction formal verification
+  - Extraction: Unified extraction dispatch + extract_correct
+  - Util.NatOpt: Nat.min optimization properties
+  - Util.NiceTree: Nice tree catamorphism with invariant preservation
+  - Util.FoldMin: List.foldl Nat.min theorems
+  - Util.InsertMin: HashMap min-insert correctness
+  - TreewidthDP: Treewidth DP types, operations, optimality structures
+  - DPTableLemmas: DP correctness proofs + dp_optimal_of_validNTD
   - ParallelMatch: Parallel pattern matching infrastructure
   - ParallelSaturate: Parallel saturation loop
   - Optimize: Optimization pipeline (greedy + ILP)
   - TranslationValidation: End-to-end soundness theorems
+  - PipelineSoundness: Verified pipeline functions + user-facing correctness
+  - CompletenessSpec: bestNode DAG acyclicity + cost computation completeness
 -/
 import LambdaSat.UnionFind
 import LambdaSat.Core
@@ -35,6 +44,13 @@ import LambdaSat.ILPEncode
 import LambdaSat.ILPSolver
 import LambdaSat.ILPCheck
 import LambdaSat.ILPSpec
+import LambdaSat.Extraction
+import LambdaSat.Util.NatOpt
+import LambdaSat.Util.NiceTree
+import LambdaSat.Util.FoldMin
+import LambdaSat.Util.InsertMin
+import LambdaSat.TreewidthDP
+import LambdaSat.DPTableLemmas
 import LambdaSat.ParallelMatch
 import LambdaSat.ParallelSaturate
 import LambdaSat.Optimize
@@ -43,3 +59,5 @@ import LambdaSat.SaturationSpec
 import LambdaSat.AddNodeTriple
 import LambdaSat.EMatchSpec
 import LambdaSat.TranslationValidation
+import LambdaSat.PipelineSoundness
+import LambdaSat.CompletenessSpec

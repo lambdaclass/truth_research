@@ -1,4 +1,4 @@
-name = "lambdasat-lean"
+name = "optisat"
 version = "0.1.0"
 keywords = ["equality-saturation", "e-graph", "verification"]
 defaultTargets = ["LambdaSat"]
