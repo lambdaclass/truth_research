@@ -18,6 +18,18 @@ open UnionFind
 -- Optimization Configuration
 -- ══════════════════════════════════════════════════════════════════
 
+/-! ## TCB Note
+
+    The functions in this file (`optimizeExpr`, `optimizeExprILP`, `optimizeExprAuto`)
+    use `partial def saturate` (Saturate.lean) and are **outside the verified TCB**.
+    They provide production features (timeouts, node limits, statistics) that cannot
+    be expressed in total functions.
+
+    For formally verified optimization, use `optimizeF` or `optimizeWithStrategyF`
+    from `PipelineSoundness.lean`, which compose the total, verified spec functions
+    (`saturateF`, `computeCostsF`, `extractAuto`/`extract`) with proven correctness
+    theorems (`optimizeF_soundness`, `optimizeWithStrategyF_soundness`). -/
+
 /-- Optimization pipeline configuration. -/
 structure OptConfig where
   /-- Saturation configuration -/

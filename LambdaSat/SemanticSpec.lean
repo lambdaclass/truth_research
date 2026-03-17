@@ -692,7 +692,7 @@ theorem mergeAll_consistent : ∀ (merges : List (EClassId × EClassId))
 -- ══════════════════════════════════════════════════════════════════
 
 /-- Compute updated bestCost/bestNode for one class. -/
-private def updateClassBest (uf : UnionFind) (costFn : ENode Op → Nat)
+def updateClassBest (uf : UnionFind) (costFn : ENode Op → Nat)
     (acc : Std.HashMap EClassId (EClass Op)) (eclass : EClass Op)
     : Nat × Option (ENode Op) × Bool :=
   let getCost (id : EClassId) : Nat :=
@@ -708,7 +708,7 @@ private def updateClassBest (uf : UnionFind) (costFn : ENode Op → Nat)
       else (curBest, curNode, curChanged)
 
 /-- Process a list of class IDs, updating bestCost/bestNode. -/
-private def processKeys (uf : UnionFind) (costFn : ENode Op → Nat)
+def processKeys (uf : UnionFind) (costFn : ENode Op → Nat)
     (origClasses : Std.HashMap EClassId (EClass Op))
     : List EClassId → Std.HashMap EClassId (EClass Op) → Bool →
       Std.HashMap EClassId (EClass Op) × Bool
@@ -726,7 +726,7 @@ private def processKeys (uf : UnionFind) (costFn : ENode Op → Nat)
         processKeys uf costFn origClasses rest acc changed
 
 /-- Loop: repeatedly process all keys until convergence or fuel exhaustion. -/
-private def computeCostsLoop (uf : UnionFind) (costFn : ENode Op → Nat)
+def computeCostsLoop (uf : UnionFind) (costFn : ENode Op → Nat)
     : Std.HashMap EClassId (EClass Op) → Nat → Std.HashMap EClassId (EClass Op)
   | classes, 0 => classes
   | classes, n + 1 =>
@@ -969,12 +969,12 @@ private theorem eclass_union_mem_right' (ec1 ec2 : EClass Op) (n : ENode Op)
     k hk_lt hk_lt
 
 /-- The empty e-graph trivially satisfies BestNodeInv. -/
-private theorem bestNodeInv_empty : BestNodeInv (EGraph.empty (Op := Op).classes) := by
+theorem bestNodeInv_empty : BestNodeInv (EGraph.empty (Op := Op).classes) := by
   intro cid cls _nd hget
   simp [EGraph.empty, Std.HashMap.get?_eq_getElem?, Std.HashMap.ofList_nil] at hget
 
 /-- Adding a node preserves BestNodeInv. -/
-private theorem add_preserves_bestNodeInv (g : EGraph Op) (node : ENode Op)
+theorem add_preserves_bestNodeInv (g : EGraph Op) (node : ENode Op)
     (h : BestNodeInv g.classes) :
     BestNodeInv (g.add node).2.classes := by
   simp only [EGraph.add]
@@ -1000,7 +1000,7 @@ private theorem add_preserves_bestNodeInv (g : EGraph Op) (node : ENode Op)
       exact h cid cls nd (by rw [Std.HashMap.get?_eq_getElem?]; exact hget) hbn
 
 /-- merge preserves BestNodeInv. -/
-private theorem merge_preserves_bestNodeInv (g : EGraph Op) (id1 id2 : EClassId)
+theorem merge_preserves_bestNodeInv (g : EGraph Op) (id1 id2 : EClassId)
     (h : BestNodeInv g.classes) :
     BestNodeInv (g.merge id1 id2).classes := by
   unfold EGraph.merge EGraph.find
@@ -1035,7 +1035,7 @@ private theorem merge_preserves_bestNodeInv (g : EGraph Op) (id1 id2 : EClassId)
       exact h cid cls nd (by rw [Std.HashMap.get?_eq_getElem?]; exact hget) hbn
 
 /-- Folding merge preserves BestNodeInv. -/
-private theorem mergeAll_preserves_bestNodeInv :
+theorem mergeAll_preserves_bestNodeInv :
     ∀ (merges : List (EClassId × EClassId)) (g : EGraph Op),
     BestNodeInv g.classes →
     BestNodeInv (merges.foldl (fun acc (id1, id2) => acc.merge id1 id2) g).classes

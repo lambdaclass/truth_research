@@ -524,4 +524,247 @@ theorem saturateF_preserves_consistent (fuel maxIter rebuildFuel : Nat)
     · exact ⟨v1, hcv2⟩
     · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2 hhcb2
 
+-- ══════════════════════════════════════════════════════════════════
+-- Section 9: BestNodeInv preservation through saturation
+-- ══════════════════════════════════════════════════════════════════
+
+set_option linter.unusedSectionVars false in
+/-- Inner `go` of instantiateF preserves BestNodeInv. -/
+private theorem instantiateF_go_preserves_bni (subst : Substitution) (fuel : Nat)
+    (ih : ∀ (g0 : EGraph Op) (pat0 : Pattern Op),
+      BestNodeInv g0.classes →
+      ∀ id g', instantiateF fuel g0 pat0 subst = some (id, g') →
+      BestNodeInv g'.classes)
+    (g : EGraph Op) (pats : List (Pattern Op)) (ids : List EClassId)
+    (h : BestNodeInv g.classes) :
+    ∀ resultIds g', instantiateF.go subst fuel g pats ids = some (resultIds, g') →
+    BestNodeInv g'.classes := by
+  induction pats generalizing g ids with
+  | nil =>
+    intro resultIds g' hgo
+    simp only [instantiateF.go] at hgo
+    have := Prod.mk.inj (Option.some.inj hgo)
+    rw [← this.2]; exact h
+  | cons p ps ihgo =>
+    intro resultIds g' hgo
+    simp only [instantiateF.go] at hgo
+    split at hgo
+    · exact absurd hgo nofun
+    · rename_i id1 g1 h1
+      exact ihgo g1 (id1 :: ids) (ih g p h id1 g1 h1) resultIds g' hgo
+
+set_option linter.unusedSectionVars false in
+/-- instantiateF preserves BestNodeInv. -/
+theorem instantiateF_preserves_bni (fuel : Nat) (g : EGraph Op) (pat : Pattern Op)
+    (subst : Substitution) (h : BestNodeInv g.classes) :
+    ∀ id g', instantiateF fuel g pat subst = some (id, g') →
+    BestNodeInv g'.classes := by
+  induction fuel generalizing g pat with
+  | zero => intro id g' h'; simp [instantiateF_zero] at h'
+  | succ n ih =>
+    intro id g' hres
+    cases pat with
+    | patVar pv =>
+      simp only [instantiateF_succ_patVar, Substitution.lookup] at hres
+      split at hres
+      · have := Prod.mk.inj (Option.some.inj hres)
+        rw [← this.2]; exact h
+      · exact absurd hres nofun
+    | node skelOp subpats =>
+      simp only [instantiateF_succ_node] at hres
+      split at hres
+      · exact absurd hres nofun
+      · rename_i childIds g1 hgo
+        have heq := Prod.mk.inj (Option.some.inj hres)
+        rw [← heq.2]
+        exact add_preserves_bestNodeInv g1 _
+          (instantiateF_go_preserves_bni subst n
+            (fun g0 pat0 h0 => ih g0 pat0 h0) g subpats [] h childIds g1 hgo)
+
+set_option linter.unusedSectionVars false in
+/-- Foldl preserves BestNodeInv when each step does. -/
+private theorem foldl_preserves_bni {α : Type} (l : List α)
+    (f : EGraph Op → α → EGraph Op)
+    (hf : ∀ a, ∀ g : EGraph Op, BestNodeInv g.classes → BestNodeInv (f g a).classes)
+    (g : EGraph Op) (h : BestNodeInv g.classes) :
+    BestNodeInv (l.foldl f g).classes := by
+  induction l generalizing g with
+  | nil => exact h
+  | cons a as ih => exact ih (f g a) (hf a g h)
+
+/-- applyRuleAtF preserves BestNodeInv. -/
+theorem applyRuleAtF_preserves_bni (fuel : Nat) (g : EGraph Op) (rule : RewriteRule Op)
+    (classId : EClassId) (h : BestNodeInv g.classes) :
+    BestNodeInv (applyRuleAtF fuel g rule classId).classes := by
+  unfold applyRuleAtF
+  suffices ∀ (ms : MatchResult) (acc : EGraph Op),
+      BestNodeInv acc.classes →
+      BestNodeInv (ms.foldl (fun acc subst =>
+        let condMet := match rule.sideCondCheck with
+          | some check => check acc subst | none => true
+        if !condMet then acc
+        else match instantiateF fuel acc rule.rhs subst with
+          | none => acc
+          | some (rhsId, acc') =>
+            let canonLhs := root acc'.unionFind classId
+            let canonRhs := root acc'.unionFind rhsId
+            if canonLhs == canonRhs then acc'
+            else acc'.merge classId rhsId) acc).classes from this _ g h
+  intro ms
+  induction ms with
+  | nil => intro acc hacc; exact hacc
+  | cons subst rest ih =>
+    intro acc hacc
+    simp only [List.foldl_cons]
+    apply ih
+    -- One step: split on match rule.sideCondCheck first
+    split
+    · -- some check: if (!check acc subst) = true then acc else ...
+      split
+      · exact hacc  -- condMet false → acc unchanged
+      · -- else branch: match on instantiateF
+        split
+        · exact hacc  -- instantiateF returned none
+        · -- some (rhsId, acc'): split on inner if
+          next rhsId acc' heq =>
+          have hbni' := instantiateF_preserves_bni fuel acc rule.rhs subst hacc _ _ heq
+          split
+          · exact hbni'
+          · exact merge_preserves_bestNodeInv _ _ _ hbni'
+    · -- none: condMet = true, !true = false → else branch
+      simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte]
+      split
+      · exact hacc
+      · next rhsId acc' heq =>
+        have hbni' := instantiateF_preserves_bni fuel acc rule.rhs subst hacc _ _ heq
+        split
+        · exact hbni'
+        · exact merge_preserves_bestNodeInv _ _ _ hbni'
+
+/-- applyRuleF preserves BestNodeInv. -/
+theorem applyRuleF_preserves_bni (fuel : Nat) (g : EGraph Op) (rule : RewriteRule Op)
+    (h : BestNodeInv g.classes) :
+    BestNodeInv (applyRuleF fuel g rule).classes := by
+  simp only [applyRuleF]
+  exact foldl_preserves_bni _ _ (fun _ acc hacc =>
+    applyRuleAtF_preserves_bni fuel acc rule _ hacc) g h
+
+/-- applyRulesF preserves BestNodeInv. -/
+theorem applyRulesF_preserves_bni (fuel : Nat) (g : EGraph Op) (rules : List (RewriteRule Op))
+    (h : BestNodeInv g.classes) :
+    BestNodeInv (applyRulesF fuel g rules).classes := by
+  simp only [applyRulesF]
+  exact foldl_preserves_bni _ _ (fun rule acc hacc =>
+    applyRuleF_preserves_bni fuel acc rule hacc) g h
+
+/-- processClass preserves classes field (only modifies UF + hashcons). -/
+private theorem processClass_preserves_classes (g : EGraph Op) (classId : EClassId) :
+    (g.processClass classId).1.classes = g.classes := by
+  simp only [EGraph.processClass]
+  rw [egraph_find_classes]
+  split
+  · rfl
+  · rename_i eclass _
+    suffices h : ∀ (init : EGraph Op × List _),
+        init.1.classes = g.classes →
+        (eclass.nodes.foldl (fun (acc : EGraph Op × List _) node =>
+          let (canonNode, acc1) := acc.1.canonicalize node
+          if canonNode == node then (acc1, acc.2)
+          else
+            let hashcons1 := acc1.hashcons.erase node
+            match hashcons1.get? canonNode with
+            | some existingId =>
+              ({ acc1 with hashcons := hashcons1.insert canonNode (g.find classId).1 },
+                ((g.find classId).1, existingId) :: acc.2)
+            | none =>
+              ({ acc1 with hashcons := hashcons1.insert canonNode (g.find classId).1 },
+                acc.2)) init).1.classes = g.classes by
+      exact h _ rfl
+    intro init hinit
+    exact @Array.foldl_induction (ENode Op) (EGraph Op × List _) eclass.nodes
+      (fun _ acc => acc.1.classes = g.classes) _ hinit _
+      (fun idx ⟨acc, merges⟩ prev => by
+        simp only at prev ⊢
+        have hcc := canonicalize_classes acc eclass.nodes[idx]
+        split
+        · rw [hcc]; exact prev
+        · split <;> (simp only []; rw [hcc]; exact prev))
+
+/-- processClass foldl preserves BestNodeInv. -/
+private theorem processClass_foldl_preserves_bni
+    (toProcess : List EClassId) (g0 : EGraph Op)
+    (merges0 : List (EClassId × EClassId))
+    (h0 : BestNodeInv g0.classes) :
+    BestNodeInv (toProcess.foldl (fun (acc : EGraph Op × List _) classId =>
+      let r := acc.1.processClass classId
+      (r.1, r.2 ++ acc.2)) (g0, merges0)).1.classes := by
+  induction toProcess generalizing g0 merges0 with
+  | nil => exact h0
+  | cons cid rest ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    rw [processClass_preserves_classes]; exact h0
+
+/-- rebuildStepBody preserves BestNodeInv. -/
+theorem rebuildStepBody_preserves_bni (g : EGraph Op)
+    (h : BestNodeInv g.classes) :
+    BestNodeInv (rebuildStepBody g).classes := by
+  simp only [rebuildStepBody]
+  apply mergeAll_preserves_bestNodeInv
+  exact processClass_foldl_preserves_bni _
+    { g with worklist := [], dirtyArr := #[] } [] h
+
+/-- rebuildF preserves BestNodeInv. -/
+theorem rebuildF_preserves_bni (g : EGraph Op) (fuel : Nat)
+    (h : BestNodeInv g.classes) :
+    BestNodeInv (rebuildF g fuel).classes := by
+  induction fuel generalizing g with
+  | zero => exact h
+  | succ n ih =>
+    simp only [rebuildF]; split
+    · exact h
+    · exact ih _ (rebuildStepBody_preserves_bni g h)
+
+/-- saturateF preserves BestNodeInv. -/
+theorem saturateF_preserves_bni (fuel maxIter rebuildFuel : Nat)
+    (g : EGraph Op) (rules : List (RewriteRule Op))
+    (h : BestNodeInv g.classes) :
+    BestNodeInv (saturateF fuel maxIter rebuildFuel g rules).classes := by
+  induction maxIter generalizing g with
+  | zero => exact h
+  | succ n ih =>
+    simp only [saturateF]; split
+    · exact rebuildF_preserves_bni _ _ (applyRulesF_preserves_bni fuel g rules h)
+    · exact ih _ (rebuildF_preserves_bni _ _ (applyRulesF_preserves_bni fuel g rules h))
+
+-- ══════════════════════════════════════════════════════════════════
+-- Section 10: saturateF preserves the full quadruple
+-- ══════════════════════════════════════════════════════════════════
+
+/-- saturateF preserves the full quadruple (CV, PMI, SHI, HCB).
+    Same proof as `saturateF_preserves_consistent`, but returns the full tuple
+    instead of just ConsistentValuation. -/
+theorem saturateF_preserves_quadruple (fuel maxIter rebuildFuel : Nat)
+    (g : EGraph Op) (rules : List (RewriteRule Op))
+    (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g)
+    (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule)) :
+    ∃ v', ConsistentValuation (saturateF fuel maxIter rebuildFuel g rules) env v' ∧
+          PostMergeInvariant (saturateF fuel maxIter rebuildFuel g rules) ∧
+          SemanticHashconsInv (saturateF fuel maxIter rebuildFuel g rules) env v' ∧
+          HashconsChildrenBounded (saturateF fuel maxIter rebuildFuel g rules) := by
+  induction maxIter generalizing g v with
+  | zero => exact ⟨v, hcv, hpmi, hshi, hhcb⟩
+  | succ n ih =>
+    simp only [saturateF]
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ :=
+      applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi hhcb
+    have ⟨hcv2, hpmi2, hshi2, hhcb2⟩ :=
+      rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1 hhcb1
+    split
+    · exact ⟨v1, hcv2, hpmi2, hshi2, hhcb2⟩
+    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2 hhcb2
+
 end LambdaSat

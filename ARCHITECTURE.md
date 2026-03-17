@@ -1,6 +1,6 @@
 # OptiSat: Architecture
 
-## Current Version: v0.2.0
+## Current Version: v1.5.2
 
 ### Fase 1: Foundation
 
@@ -137,7 +137,7 @@
 
 ---
 
-### Fase 6: Close Rebuild Sorry (v0.3.0) — PLANNED
+### Fase 6: Close Rebuild Sorry (v0.3.0)
 
 **Contents**: SemanticHashconsInv (semantic hashcons invariant replacing HashconsClassesAligned), processClass preserves SHI, processAll threaded invariant, close `rebuildStepBody_preserves_cv` sorry.
 
@@ -151,22 +151,22 @@
 
 | Nodo | Tipo | Deps | Status |
 |------|------|------|--------|
-| F6S1 SemanticHashconsInv | FUND | — | pending |
-| F6S2 processClass_preserves_shi | CRIT/GATE | F6S1 | pending |
-| F6S3 processAll_threaded | CRIT | F6S2 | pending |
-| F6S4 rebuildStepBody closure | CRIT | F6S3 | pending |
-| F6S5 chain_update | HOJA | F6S4 | pending |
+| F6S1 SemanticHashconsInv | FUND | — | ✓ |
+| F6S2 processClass_preserves_shi | CRIT/GATE | F6S1 | ✓ |
+| F6S3 processAll_threaded | CRIT | F6S2 | ✓ |
+| F6S4 rebuildStepBody closure | CRIT | F6S3 | ✓ |
+| F6S5 chain_update | HOJA | F6S4 | ✓ |
 
 #### Bloques
 
-- [ ] **Bloque 12**: F6S1
-- [ ] **Bloque 13**: F6S2 (GATE de-risk)
-- [ ] **Bloque 14**: F6S3 + F6S4
-- [ ] **Bloque 15**: F6S5
+- [x] **Bloque 12**: F6S1
+- [x] **Bloque 13**: F6S2 (GATE de-risk)
+- [x] **Bloque 14**: F6S3 + F6S4
+- [x] **Bloque 15**: F6S5
 
 ---
 
-### Fase 7: ematchF Soundness (v1.0.0) — PLANNED
+### Fase 7: ematchF Soundness (v1.0.0)
 
 **Contents**: Pattern.eval denotational semantics, ematchF_sound theorem (if ematchF returns σ, Pattern.eval under σ = v(classId)), applyRuleF_preserves_cv_internal without PreservesCV assumption, strongest pipeline soundness. OptiSat becomes first formally verified complete equality saturation motor.
 
@@ -197,7 +197,7 @@
 
 ---
 
-### Fase 8: Discharge Hypotheses + Polish (v1.1.0) — PLANNED
+### Fase 8: Discharge Hypotheses + Polish (v1.1.0)
 
 **Contents**: Probar las 3 hipótesis no descargadas del Path B como teoremas internos: SameShapeSemantics (evaluación de ops con misma forma), ematchF_substitution_bounded (sustituciones acotadas), InstantiateEvalSound (instantiateF preserva triple CV+PMI+SHI + valor correcto). Eliminar hipótesis de `full_pipeline_soundness_internal`. Cubrir recomendaciones P1-P5 de autopsia.
 
@@ -241,7 +241,7 @@
 
 ---
 
-### Fase 9: ILP Certificate Verification (v1.2.0) — PLANNED
+### Fase 9: ILP Certificate Verification (v1.2.0)
 
 **Contents**: Formal verification of the ILP extraction pipeline. Proves what `ValidSolution` means by decomposing `checkSolution` into individual Prop properties (root activation, exactly-one selection, child dependencies, acyclicity). Certificate evaluation soundness (evalVar, checkConstraint, isFeasible). Encoding correctness for `encodeEGraph`. Fuel sufficiency for `extractILPAuto`.
 
@@ -296,6 +296,158 @@
 
 ---
 
+### Fase 10: Unified Extraction Verification (v1.3.0)
+
+**Contents**: Integration of VerifiedExtraction's unified extraction interface into OptiSat. Enriches `NodeOps` typeclass with `localCost` and `mapChildren_id`, creates unified `ExtractionStrategy` dispatch (greedy/ILP), and proves the master `extract_correct` theorem composing `extractF_correct` + `ilp_extraction_soundness`.
+
+**Key insight**: OptiSat already had 100% of the underlying theorems (`extractF_correct`, `ilp_extraction_soundness`). The integration required only typeclass enrichment + a thin composition layer (78 LOC). Adapted from VerifiedExtraction/Integration.lean without adding it as a dependency.
+
+**Files**:
+- `LambdaSat/Core.lean` (modified: +localCost, +mapChildren_id to NodeOps + ENode)
+- `LambdaSat/Extraction.lean` (new: ExtractionStrategy, extract, StrategyValid, extract_correct)
+- `LambdaSat.lean` (modified: +import Extraction)
+- `Tests/IntegrationTests.lean` (modified: +localCost/mapChildren_id instance, +2 smoke tests)
+
+#### DAG (v1.3.0)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| F10S1 NodeOps enrichment | FUND | — | ✓ |
+| F10S2 Extraction.lean | CRIT | F10S1 | ✓ |
+| F10S3 Wire + verify | HOJA | F10S2 | ✓ |
+
+#### Bloques
+
+- [x] **Bloque 29**: F10S1 (FUND: add localCost + mapChildren_id to NodeOps, update ArithOp instance) ✓
+- [x] **Bloque 30**: F10S2 (CRIT: create Extraction.lean with extract_correct — zero axioms, zero warnings) ✓
+- [x] **Bloque 31**: F10S3 (HOJA: wire imports + 2 smoke tests, 25/25 integration tests pass) ✓
+
+---
+
+### Fase 11: DP Extraction Optimality (v1.4.0)
+
+**Contents**: Verified DP-based optimal extraction via nice tree decompositions. Copies/adapts infrastructure from DynamicTreeProg (NiceTree, NatOpt, FoldMin, InsertMin utilities) and VerifiedExtraction (TreewidthDP types + DPTableLemmas proofs). Bottom-up DP via `treeFold_inv` on NiceTree, producing `dp_optimal_of_validNTD: dpOptimalCost ≤ selectionCost`.
+
+**Key insight**: VerifiedExtraction already adapted DynamicTreeProg into its `Util/` directory. Copy from VE/Util directly (identical content, correct namespacing). The e-graph-specific code (~1100 LOC) from VE/TreewidthDP + VE/DPTableLemmas is the core work. The capstone theorem `dp_optimal_of_validNTD` composes `runDP_DPCompleteInv` → `dpOptimalityWitness_from_completeInv` → `dp_extraction_optimal` with zero axioms.
+
+**Reference**: Goharshady et al. 2024 "Fast and Optimal Extraction for Sparse Equality Graphs" §4. Lessons L-371 (copy, don't import), L-467 (DP tight bound), L-405 (HashMap.fold).
+
+**Files** (new):
+- `LambdaSat/Util/NatOpt.lean` (46 LOC, 11T) — Nat.min properties
+- `LambdaSat/Util/FoldMin.lean` (81 LOC, 6T) — List.foldl Nat.min
+- `LambdaSat/Util/InsertMin.lean` (88 LOC, 4T+1D) — HashMap insertWith min
+- `LambdaSat/Util/NiceTree.lean` (107 LOC, 6T+5D) — NiceTree catamorphism + invariant preservation
+- `LambdaSat/TreewidthDP.lean` (372 LOC, 9T+20D) — DP types, operations, DPCompleteInv, optimality structures
+- `LambdaSat/DPTableLemmas.lean` (728 LOC, 45T+1D) — Canonicalization + all 4 operation proofs + ValidNTD + runDP_DPCompleteInv + dp_optimal_of_validNTD
+
+**Files** (modified):
+- `LambdaSat.lean` — add 6 new module imports
+- `Tests/IntegrationTests.lean` — 4 DP smoke tests (T26-T29)
+
+#### DAG (v1.4.0)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| F11S1 NatOpt utilities | PAR | — | ✓ |
+| F11S2 FoldMin utilities | PAR | F11S1 | ✓ |
+| F11S3 InsertMin utilities | PAR | F11S1 | ✓ |
+| F11S4 NiceTree catamorphism | PAR | — | ✓ |
+| F11S5 TreewidthDP types + DP ops | FUND | F11S1-S4 | ✓ |
+| F11S6 DPTableLemmas (canon + insertMin + fold + 4 ops + ValidNTD + master) | CRIT | F11S5 | ✓ |
+| F11S7-S9 Operation DPCompleteInv proofs | PAR | F11S6 | ✓ (in F11S6) |
+| F11S10 runDP_DPCompleteInv | GATE | F11S7-S9 | ✓ (in F11S6) |
+| F11S11 dp_optimal_of_validNTD | HOJA | F11S10 | ✓ (in F11S6) |
+| F11S12 Integration + smoke tests | HOJA | F11S11 | ✓ |
+
+#### Bloques
+
+- [x] **Bloque 32**: F11S1 + F11S4 (NatOpt 46 LOC + NiceTree 107 LOC — both compile) ✓
+- [x] **Bloque 33**: F11S2 + F11S3 (FoldMin 81 LOC + InsertMin 88 LOC — both compile) ✓
+- [x] **Bloque 34**: F11S5 (TreewidthDP 372 LOC — all types, operations, optimality structures compile) ✓
+- [x] **Bloque 35-37**: F11S6-S10 (DPTableLemmas 728 LOC — canonicalization + 4 operation proofs + ValidNTD + runDP_DPCompleteInv compile as single file) ✓
+- [x] **Bloque 38**: F11S11-S12 (dp_optimal_of_validNTD added to DPTableLemmas + 6 imports + 4 smoke tests, 29/29 PASS) ✓
+
+#### Decisiones de diseño
+
+**Consolidation**: Planned nodes F11S7-S11 (4 operation proofs + ValidNTD + runDP_DPCompleteInv + dp_optimal_of_validNTD) were implemented in a single `DPTableLemmas.lean` file, matching VE's structure. This collapsed Bloques 35-37 into one file write.
+
+**Namespace**: All new code under `LambdaSat` namespace. Utilities under `LambdaSat.Util.{NatOpt,FoldMin,InsertMin,NiceTree}`. DP-specific under `LambdaSat.TreewidthDP` and `LambdaSat.DPTableLemmas`.
+
+**Copy source**: Copied from VerifiedExtraction/Util/ (already adapted from DynamicTreeProg). For e-graph-specific code, copied from VerifiedExtraction/TreewidthDP.lean and DPTableLemmas.lean. Only namespace changes (`VerifiedExtraction` → `LambdaSat`) needed.
+
+---
+
+### Fase 12: API-Specification Bridge (v1.5.0)
+
+**Contents**: Verified pipeline functions that compose existing spec theorems (`saturateF_preserves_consistent`, `computeCostsF_extractF_correct`, `extract_correct`) into user-facing correctness guarantees. Creates the "last mile" connection between the verified internals and the public API.
+
+**Key insight**: The public API functions (`optimizeExpr`, `saturate`) are `partial def` and cannot be reasoned about in Lean 4. Instead of refactoring them (which would break production features like timeouts), we create new verified pipeline functions (`optimizeF`, `optimizeWithStrategyF`) that compose the already-verified `*F` functions. This follows the established codebase pattern: `ematch`→`ematchF`, `rebuild`→`rebuildF`, `saturate`→`saturateF`, now `optimizeExpr`→`optimizeF`.
+
+**Reference**: Three-Tier Bridge pattern (Extraction.lean v1.3.0), L-337 (compositional correctness), L-393 (wiring theorems ≤5 lines), L-352 (spec-impl connection).
+
+**Files** (new):
+- `LambdaSat/PipelineSoundness.lean` — optimizeF, optimizeWithStrategyF, soundness theorems
+
+**Files** (modified):
+- `LambdaSat/Optimize.lean` — TCB boundary documentation
+- `LambdaSat.lean` — +import PipelineSoundness
+- `Tests/IntegrationTests.lean` — pipeline soundness smoke tests
+- `README.md` — v1.5.0 update
+
+#### DAG (v1.5.0)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| F12S1 optimizeF + optimizeWithStrategyF defs | FUND | — | ✓ |
+| F12S2 optimizeF_soundness + optimizeWithStrategyF_soundness | CRIT | F12S1 | ✓ |
+| F12S3 Integration + TCB docs + README | HOJA | F12S2 | ✓ |
+
+#### Bloques
+
+- [x] **Bloque 39**: F12S1 (FUND: define optimizeF + optimizeWithStrategyF in PipelineSoundness.lean) ✓
+- [x] **Bloque 40**: F12S2 (CRIT: prove optimizeF_soundness + optimizeWithStrategyF_soundness — wiring theorems, 0 axioms, 0 warnings) ✓
+- [x] **Bloque 41**: F12S3 (HOJA: wire imports + 2 smoke tests T30-T31, TCB docs in Optimize.lean, README v1.5.0, 31/31 PASS) ✓
+
+---
+
+### Fase 13: Completeness (v1.5.1)
+
+**Contents**: Formal completeness for the extraction pipeline. Proves bestNode DAG acyclicity after cost computation, fuel sufficiency for `extractAuto`, and discharges remaining hypotheses (`WellFormed`, `BestNodeInv`) from pipeline soundness theorems. Closes the gap between soundness ("IF some THEN correct") and completeness ("IF answer exists THEN extractAuto finds it").
+
+**Gaps addressed**:
+- G1: bestNode DAG acyclicity not proven (CRITICAL)
+- G2: Fuel sufficiency for extractAuto not proven (HIGH)
+- G3: WellFormed/BestNodeInv hypotheses in pipeline theorems not auto-discharged (HIGH)
+
+**Reference**: L-203 (fuel depth bound via pigeonhole), L-222 (sub-invariant factoring), L-292 (fuel monotonicity), L-338 (fuel composition via max).
+
+**Files** (new):
+- `LambdaSat/CompletenessSpec.lean` — AcyclicBestNodeDAG, fuel sufficiency, extractAuto_complete
+
+**Files** (modified):
+- `LambdaSat/PipelineSoundness.lean` — saturateF_preserves_quadruple_internal, optimizeF_soundness_complete
+- `LambdaSat.lean` — +import CompletenessSpec
+- `Tests/IntegrationTests.lean` — completeness smoke tests T32-T33
+- `README.md` — v1.5.1 update
+
+#### DAG (v1.5.1)
+
+| Nodo | Tipo | Deps | Status |
+|------|------|------|--------|
+| N13.1 AcyclicBestNodeDAG definition + proof | FUND | — | ✓ |
+| N13.2 Fuel sufficiency + extractAuto completeness | CRIT | N13.1 | ✓ |
+| N13.3 Hypothesis discharge (WF + BNI chain) | PAR | — | ✓ |
+| N13.4 Integration tests + documentation | HOJA | N13.1, N13.2, N13.3 | ✓ |
+
+#### Bloques
+
+- [x] **Bloque 42**: N13.1 (FUND: AcyclicBestNodeDAG in CompletenessSpec.lean — bestCostLowerBound_acyclic, 0 sorry, 0 axioms. HashMap API gap closed via Std.HashMap.nodup_keys in Lean 4.26)
+- [x] **Bloque 43**: N13.3 (PAR: saturateF_preserves_quadruple_internal, optimizeF_soundness_complete in PipelineSoundness.lean, 0 sorry, 0 axioms)
+- [x] **Bloque 44**: N13.2 (CRIT: extractF_of_rank, extractAuto_complete — strong induction on rank, 0 sorry, 0 axioms)
+- [x] **Bloque 45**: N13.4 (HOJA: tests T32-T33, README/ARCHITECTURE/BENCHMARKS v1.5.1, Path G)
+
+---
+
 ## Version History
 
 | Version | Date | Highlights |
@@ -306,6 +458,11 @@
 | **v1.0.0** | Feb 2026 | PreservesCV eliminated: Pattern.eval + ematchF_sound + full_pipeline_soundness_internal. 20 src files, 7,748 LOC, 218 theorems, 0 sorry, zero axioms, zero user assumptions. |
 | **v1.1.0** | Feb 2026 | Zero external hypotheses: InstantiateEvalSound_holds + ematchF_substitution_bounded + processClass_preserves_hcb + full_pipeline_soundness. 21 src files, 8,622 LOC, 233 theorems, 0 sorry, zero axioms, zero external hypotheses. 13 integration tests (5 new edge-case tests). |
 | **v1.2.0** | Feb 2026 | ILP certificate verification: checkSolution soundness (4 check*_sound), encoding properties (encodeEGraph_rootClassId/numClasses), extractILP fuel monotonicity. 21 src files, 8,956 LOC, 248 theorems, 0 sorry, zero axioms. 23 integration tests (9 new ILP edge-case tests). |
+| **v1.3.0** | Mar 2026 | Unified extraction verification: ExtractionStrategy dispatch, extract_correct master theorem (greedy + ILP). NodeOps enriched with localCost + mapChildren_id. Adapted from VerifiedExtraction. 22 src files, 9,034 LOC, 249 theorems, 0 sorry, zero axioms. 25 integration tests. |
+| **v1.4.0** | Mar 2026 | DP extraction optimality: Treewidth DP on nice tree decompositions. dp_optimal_of_validNTD (dpOptimalCost ≤ selectionCost). 6 new files, 1422 new LOC, 81 new theorems. Adapted from VerifiedExtraction + DynamicTreeProg. 28 src files, ~10,456 LOC, ~330 theorems, 0 sorry, zero axioms. 29 integration tests. |
+| **v1.5.0** | Mar 2026 | API-specification bridge: User-facing verified pipeline functions (optimizeF, optimizeWithStrategyF) with formal soundness proofs. Closes "last mile" gap between verified internals and public API. 1 new file, 163 new LOC, 2 new theorems (0 axioms), 2 new defs. 29 src files, 10,643 LOC, 351 theorems, 0 sorry, zero axioms. 31 integration tests. |
+| **v1.5.1** | Mar 2026 | Extraction completeness: bestNode DAG acyclicity (bestCostLowerBound_acyclic), fuel sufficiency (extractF_of_rank), extractAuto_complete, hypothesis discharge (saturateF_preserves_quadruple_internal). HashMap API gap closed via `Std.HashMap.keys`/`toList` simp lemmas + `Std.HashMap.nodup_keys` (Lean 4.26). 1 new file, ~670 new LOC, 7 new theorems, **0 sorry**, 0 axioms. 30 src files, 11,310 LOC, 358 theorems. 33 integration tests. |
+| **v1.5.2** | Mar 2026 | Project rename LambdaSat → OptiSat in all documentation. Source module paths unchanged. 363 theorems, 0 sorry, zero axioms. 33 integration tests. |
 
 ---
 
@@ -333,9 +490,32 @@ Path C (v1.1.0 — zero external hypotheses):
   + ematchF_substitution_bounded (EMatchSpec)
   + processClass_preserves_hcb (CoreSpec)
     → full_pipeline_soundness (TranslationValidation)
+
+Path D (v1.3.0 — unified extraction):
+  extractF_correct (ExtractSpec)
+  + ilp_extraction_soundness (ILPSpec)
+    → extract_correct (Extraction) — strategy-parameterized dispatch
+
+Path E (v1.4.0 — DP optimality):
+  dpLeaf/Forget/Introduce/Join_DPCompleteInv (DPTableLemmas)
+    → runDP_DPCompleteInv (DPTableLemmas) — ValidNTD induction
+      → dpOptimalityWitness_from_completeInv (TreewidthDP)
+        → dp_optimal_of_validNTD (DPTableLemmas) — dpOptimalCost ≤ selectionCost
+
+Path F (v1.5.0 — user-facing pipeline soundness):
+  full_pipeline_soundness (TranslationValidation)
+    → optimizeF_soundness (PipelineSoundness) — greedy pipeline
+  saturateF_preserves_consistent_internal + extract_correct
+    → optimizeWithStrategyF_soundness (PipelineSoundness) — strategy-parameterized
+
+Path G (v1.5.1 — extraction completeness):
+  BestCostLowerBound + positive costFn
+    → bestCostLowerBound_acyclic (CompletenessSpec) — AcyclicBestNodeDAG
+      → extractF_of_rank (CompletenessSpec) — fuel sufficiency via rank
+        → extractAuto_complete (CompletenessSpec) — extraction always succeeds
 ```
 
-**Sorry**: 0 since v0.3.0. **PreservesCV**: eliminated in v1.0.0. **External hypotheses**: eliminated in v1.1.0.
+**Sorry**: 0 across all versions (v0.3.0–v1.5.2). The HashMap API gap in `computeCostsLoop_selfLB` (v1.5.1) was closed via `Std.HashMap.keys`/`toList` simp lemmas + `Std.HashMap.nodup_keys` available in Lean 4.26. **PreservesCV**: eliminated in v1.0.0. **External hypotheses**: eliminated in v1.1.0.
 
 ---
 
@@ -349,7 +529,13 @@ Path C (v1.1.0 — zero external hypotheses):
 - SaturationSpec: saturateF_preserves_consistent_internal (13 theorems)
 - ExtractSpec: extractF_correct (3 theorems)
 - ILPSpec: ilp_extraction_soundness (3 theorems)
+- Extraction: extract_correct — unified greedy/ILP dispatch (1 theorem)
+- TreewidthDP: DPCompleteInv, DPOptimalityWitness, optimality bridge (3 theorems)
+- DPTableLemmas: ValidNTD, runDP_DPCompleteInv, dp_optimal_of_validNTD (45 theorems)
+- Util: NatOpt (11T), NiceTree (6T+5D), FoldMin (6T), InsertMin (4T+1D) — DP infrastructure
 - TranslationValidation: full_pipeline_soundness (8 theorems)
+- PipelineSoundness: optimizeF_soundness, optimizeWithStrategyF_soundness (2 theorems) ← v1.5.0
+- CompletenessSpec: bestCostLowerBound_acyclic, extractF_of_rank, extractAuto_complete (7 theorems, 0 sorry, 0 axioms) ← v1.5.1
 
 **Assumed correct** (outside TCB):
 - Lean 4 kernel (v4.26.0) — type-checks all proofs
@@ -361,6 +547,7 @@ Path C (v1.1.0 — zero external hypotheses):
 **Unverified wrappers** (correct by construction but no formal proof):
 - ParallelMatch.lean — IO.asTask wrapper around verified sequential ematchF
 - ParallelSaturate.lean — IO.asTask wrapper around verified sequential saturateF
+- Optimize.lean — `optimizeExpr`/`optimizeExprILP`/`optimizeExprAuto` use `partial def saturate` (timeouts, node limits, stats). For verified optimization, use `optimizeF`/`optimizeWithStrategyF` from PipelineSoundness.lean
 
 ---
 
