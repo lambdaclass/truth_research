@@ -18,9 +18,14 @@ class NodeOps (Op : Type) where
   /-- Replace children positionally with new IDs.
       `replaceChildren op [c0, c1, ...]` creates a new op with children replaced. -/
   replaceChildren : Op → List EClassId → Op
+  /-- Local cost of an operation (not including children).
+      Used as default cost function in `computeCostsF`. -/
+  localCost : Op → Nat
   /-- Law: `mapChildren f` transforms the children list by `List.map f`. -/
   mapChildren_children : ∀ (f : EClassId → EClassId) (op : Op),
     children (mapChildren f op) = (children op).map f
+  /-- Law: `mapChildren` with identity is identity. -/
+  mapChildren_id : ∀ (op : Op), mapChildren id op = op
   /-- Law: `replaceChildren op ids` yields children `ids` when lengths match. -/
   replaceChildren_children : ∀ (op : Op) (ids : List EClassId),
     ids.length = (children op).length →
@@ -68,13 +73,20 @@ def children (node : ENode Op) : List EClassId :=
 def mapChildren (f : EClassId → EClassId) (node : ENode Op) : ENode Op :=
   ⟨NodeOps.mapChildren f node.op⟩
 
+def localCost (node : ENode Op) : Nat :=
+  NodeOps.localCost node.op
+
 @[simp] theorem mapChildren_children (f : EClassId → EClassId) (node : ENode Op) :
     (node.mapChildren f).children = node.children.map f := by
   simp [children, mapChildren, NodeOps.mapChildren_children]
 
+@[simp] theorem mapChildren_id (node : ENode Op) :
+    node.mapChildren id = node := by
+  simp [mapChildren, NodeOps.mapChildren_id]
+
 end ENode
 
-private def infinityCost : Nat := 1000000000
+def infinityCost : Nat := 1000000000
 
 /-- An equivalence class: array of equivalent e-nodes + best cost tracking. -/
 structure EClass (Op : Type) where

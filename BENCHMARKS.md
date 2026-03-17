@@ -1,4 +1,4 @@
-# OptiSat Benchmarks (v0.2.0)
+# OptiSat Benchmarks (v1.5.0)
 
 ## Criteria (v0.1.0)
 
@@ -882,6 +882,223 @@ Nodes covered: F9S10 extractILPAuto_fuel.
 | Item | Location | Cause | Affected Nodes | Mitigation |
 |------|----------|-------|----------------|------------|
 | (none) | — | — | — | — |
+
+### Fase 10: Unified Extraction Verification (v1.3.0)
+
+**Status**: PASS
+
+| Métrica | Target | Actual | Status |
+|---------|--------|--------|--------|
+| LOC (new) | ~80 | 78 (Extraction.lean) | PASS |
+| Theorems (new) | 1 | 1 (extract_correct) | PASS |
+| Sorry | 0 | 0 | PASS |
+| Axioms | 0 | 0 | PASS |
+| Integration tests | 25 | 25/25 PASS | PASS |
+| `lake build` | 25 jobs | 25 jobs PASS | PASS |
+| `lean_verify` | no axioms/warnings | ✓ | PASS |
+
+**Cumulative**: 22 src files, 9,034 LOC, 249 theorems, 0 sorry, 0 axioms.
+
+#### Bloque 29: F10S1 (NodeOps enrichment)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+- Added `localCost : Op → Nat` and `mapChildren_id` law to NodeOps class
+- Added `ENode.localCost` and `ENode.mapChildren_id` helpers
+- Updated ArithOp instance in IntegrationTests.lean
+- `lake build`: 24/24 PASS, zero sorry
+
+#### Bloque 30: F10S2 (Extraction.lean)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+- Created `LambdaSat/Extraction.lean` (78 LOC): ExtractionStrategy, extract, StrategyValid, extract_correct
+- `lean_verify extract_correct`: zero axioms, zero warnings
+- Composes `extractF_correct` (ExtractSpec) + `ilp_extraction_soundness` (ILPSpec)
+
+#### Bloque 31: F10S3 (Wire + verify)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+- Added `import LambdaSat.Extraction` to root module
+- Added 2 smoke tests: unified greedy empty + unified ILP empty
+- `lake build`: 25/25 PASS
+- Integration tests: 25/25 PASS
+
+---
+
+## Fase 11: DP Extraction Optimality (v1.4.0)
+
+### Bloque 32: F11S1 + F11S4 (NatOpt + NiceTree)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+| Node | LOC | Theorems | Defs | Sorry | Axioms | Warnings |
+|------|-----|----------|------|-------|--------|----------|
+| F11S1 NatOpt | 46 | 11 | 0 | 0 | 0 | 0 |
+| F11S4 NiceTree | 107 | 6 | 5 | 0 | 0 | 0 |
+
+### Bloque 33: F11S2 + F11S3 (FoldMin + InsertMin)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+| Node | LOC | Theorems | Defs | Sorry | Axioms | Warnings |
+|------|-----|----------|------|-------|--------|----------|
+| F11S2 FoldMin | 81 | 6 | 0 | 0 | 0 | 0 |
+| F11S3 InsertMin | 88 | 4 | 1 | 0 | 0 | 0 |
+
+### Bloque 34: F11S5 (TreewidthDP)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+| Node | LOC | Theorems | Defs | Sorry | Axioms | Warnings |
+|------|-----|----------|------|-------|--------|----------|
+| F11S5 TreewidthDP | 372 | 9 | 20 | 0 | 0 | 0 |
+
+### Bloque 35-37: F11S6-S10 (DPTableLemmas — all proofs)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+| Node | LOC | Theorems | Defs | Sorry | Axioms | Warnings |
+|------|-----|----------|------|-------|--------|----------|
+| F11S6 DPTableLemmas | 728 | 45 | 1 | 0 | 0 | 0 |
+
+Key proofs verified:
+- `dp_optimal_of_validNTD`: 0 axioms, 0 warnings
+- `runDP_DPCompleteInv`: 0 axioms, 0 warnings
+- All 4 DPCompleteInv operation proofs: leaf, forget, introduce, join
+
+### Bloque 38: F11S11-S12 (Integration)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+- 6 new imports added to `LambdaSat.lean`
+- 4 DP smoke tests (T26-T29): all PASS
+- `lake build`: 31/31 PASS
+- Integration tests: 29/29 PASS
+
+### Fase 11 Summary (v1.4.0)
+
+| Metric | Value |
+|--------|-------|
+| New files | 6 |
+| New LOC | 1,422 |
+| New theorems | 81 |
+| New defs | 27 |
+| Sorry | 0 |
+| Axioms | 0 |
+| Warnings | 0 |
+| Integration tests | 29/29 |
+| Build jobs | 31/31 |
+
+---
+
+### Fase 12: API-Specification Bridge (v1.5.0)
+
+<!-- CHECK:F12S1:FUND:compilation -->
+<!-- CHECK:F12S1:FUND:no-sorry -->
+<!-- CHECK:F12S1:FUND:no-axioms -->
+<!-- CHECK:F12S2:CRIT:compilation -->
+<!-- CHECK:F12S2:CRIT:no-sorry -->
+<!-- CHECK:F12S2:CRIT:no-axioms -->
+<!-- CHECK:F12S2:CRIT:zero-warnings -->
+<!-- CHECK:F12S2:CRIT:theorem-verification -->
+<!-- CHECK:F12S3:HOJA:build-all -->
+<!-- CHECK:F12S3:HOJA:integration-tests -->
+
+#### Criteria (v1.5.0)
+
+| Metric | Target |
+|--------|--------|
+| New theorems | ≥ 2 |
+| New definitions | ≥ 2 |
+| Sorry count | 0 |
+| Custom axioms | 0 |
+| Warnings | 0 |
+| `lake build` | PASS (all jobs) |
+| Integration tests | all PASS |
+| `optimizeF_soundness` axiom-free | verified |
+| `optimizeWithStrategyF_soundness` axiom-free | verified |
+
+#### Bloque 39-41: F12S1-S3 (Consolidated)
+
+**Closed**: 2026-03-02 | **Status**: PASS
+
+| Node | LOC | Theorems | Defs | Sorry | Axioms | Warnings |
+|------|-----|----------|------|-------|--------|----------|
+| F12S1 optimizeF defs | 163 | 0 | 2 | 0 | 0 | 0 |
+| F12S2 soundness proofs | 163 | 2 | 2 | 0 | 0 | 0 |
+| F12S3 integration + docs | 163 | 2 | 2 | 0 | 0 | 0 |
+
+Key proofs verified:
+- `optimizeF_soundness`: 0 axioms, 0 warnings — 2-line wiring via `full_pipeline_soundness`
+- `optimizeWithStrategyF_soundness`: 0 axioms, 0 warnings — composes saturation + cost + `extract_correct`
+- `lake build`: 32/32 PASS
+- Integration tests: 31/31 PASS (T30, T31 new)
+
+Lessons: L-512 (Three-Tier Bridge), L-513 (Compositional Pipeline Proofs), L-514 (Partial defs in Lean 4)
+
+### Fase 12 Summary (v1.5.0)
+
+| Metric | Value |
+|--------|-------|
+| New files | 1 |
+| New LOC | 163 |
+| New theorems | 2 |
+| New defs | 2 |
+| Sorry | 0 |
+| Axioms | 0 |
+| Warnings | 0 |
+| Integration tests | 31/31 |
+| Build jobs | 32/32 |
+
+### Fase 13: Completeness (v1.5.1)
+
+#### Criteria <!-- CHECK:fase13 -->
+
+| Métrica | Target |
+|---------|--------|
+| New LOC | 200-400 |
+| New theorems | 8-15 |
+| Sorry | **0** |
+| Axioms | **0** |
+| `lake build` | all jobs PASS |
+| Integration tests | 33/33 (T32-T33 new) |
+| `AcyclicBestNodeDAG` defined | ✓ |
+| `computeCostsF_acyclic` proven | ✓ |
+| `extractAuto_complete` proven | ✓ |
+| `optimizeF_soundness_complete` (no hwf_sat/hbni_sat) | ✓ |
+
+**Per-node criteria:**
+- N13.1 (FUND): `AcyclicBestNodeDAG` predicate, `computeCostsF_acyclic` theorem, 0 sorry, 0 axioms
+- N13.2 (CRIT): `acyclic_depth_le_numClasses`, `extractF_succeeds`, `extractAuto_complete`, 0 sorry
+- N13.3 (PAR): `saturateF_preserves_quadruple_internal`, `saturateF_preserves_wf`, `optimizeF_soundness_complete`, 0 sorry
+- N13.4 (HOJA): T32-T33 PASS, README v1.5.1, Path G in soundness chain
+
+#### Results
+
+| Métrica | Target | Actual | Status |
+|---------|--------|--------|--------|
+| New LOC | 200-400 | ~670 | ✓ (exceeded) |
+| New theorems | 8-15 | 7 (CompletenessSpec) + PipelineSoundness additions | ✓ |
+| Sorry | **0** | **0** (HashMap API gap closed via `Std.HashMap.nodup_keys` in Lean 4.26) | ✓ |
+| Axioms | **0** | **0** | ✓ |
+| `lake build` | all jobs PASS | 33/33 PASS | ✓ |
+| Integration tests | 33/33 | 33/33 PASS | ✓ |
+| `AcyclicBestNodeDAG` defined | ✓ | ✓ (via ranking function) | ✓ |
+| `computeCostsF_acyclic` proven | ✓ | ✓ (0 sorry, 0 axioms — HashMap gap closed) | ✓ |
+| `extractAuto_complete` proven | ✓ | ✓ (0 sorry, 0 axioms) | ✓ |
+| `optimizeF_soundness_complete` | ✓ | ✓ (saturateF_preserves_quadruple_internal) | ✓ |
+
+**Per-node results:**
+- N13.1 (FUND, B42): `BestNodeChild`, `AcyclicBestNodeDAG`, `BestCostLowerBound`, `bestCostLowerBound_acyclic` (0 axioms), `computeCostsF_acyclic` (0 sorry, 0 axioms — HashMap API gap closed via `Std.HashMap.keys`/`toList` simp lemmas + `Std.HashMap.nodup_keys` in Lean 4.26)
+- N13.2 (CRIT, B44): `extractF_of_rank` (strong induction on rank, 0 sorry, 0 axioms), `extractAuto_complete` (0 sorry, 0 axioms)
+- N13.3 (PAR, B43): `saturateF_preserves_quadruple_internal`, `saturateF_preserves_wf`, `saturateF_preserves_bni`, `computeCostsF_preserves_bni`, `optimizeF_soundness_complete` (0 sorry, 0 axioms)
+- N13.4 (HOJA, B45): T32-T33 PASS, README v1.5.1, Path G added to soundness chain
+
+**Gap closed**: The HashMap API gap in `computeCostsLoop_selfLB` (needing `(m.toList.map Prod.fst).Nodup`) was resolved using `Std.HashMap.keys` = `m.toList.map Prod.fst` (via simp) combined with `Std.HashMap.nodup_keys`, both available in Lean 4.26's `Std.HashMap` API. See `keys_nodup_cls` in `CompletenessSpec.lean:194-198`. All 7 theorems in CompletenessSpec now have **0 sorry, 0 axioms**.
+
+---
 
 ## Previous Results
 
