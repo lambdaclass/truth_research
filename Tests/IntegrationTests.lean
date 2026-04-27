@@ -68,24 +68,24 @@ instance : NodeOps ArithOp where
     cases op <;> simp
   replaceChildren_children op ids hlen := by
     cases op with
-    | const n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.children]
-    | var n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.children]
+    | const n => simp at hlen; simp [hlen]
+    | var n => simp at hlen; simp [hlen]
     | add l r =>
-      simp [NodeOps.children] at hlen
-      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.children]
+      simp at hlen
+      match ids, hlen with | [a, b], _ => simp
     | mul l r =>
-      simp [NodeOps.children] at hlen
-      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.children]
+      simp at hlen
+      match ids, hlen with | [a, b], _ => simp
   replaceChildren_sameShape op ids hlen := by
     cases op with
-    | const n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.mapChildren]
-    | var n => simp [NodeOps.children] at hlen; simp [hlen, NodeOps.mapChildren]
+    | const n => simp at hlen; simp
+    | var n => simp at hlen; simp
     | add l r =>
-      simp [NodeOps.children] at hlen
-      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.mapChildren]
+      simp at hlen
+      match ids, hlen with | [a, b], _ => simp
     | mul l r =>
-      simp [NodeOps.children] at hlen
-      match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.mapChildren]
+      simp at hlen
+      match ids, hlen with | [a, b], _ => simp
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 3: Arithmetic Expression Type + Extractable/EvalExpr
