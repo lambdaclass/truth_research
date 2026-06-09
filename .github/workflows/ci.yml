@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Pin toolchain
+        run: elan toolchain install "$(cat lean-toolchain)"
+
+      - name: Build
+        # NOTE: The axiom-guard plugin emits warnings only. The gate should be
+        # `lake build --wfail`, but the project currently has pre-existing linter
+        # warnings (unusedSectionVars, unusedSimpArgs) that would fail --wfail.
+        # Tracked in the "Enable --wfail axiom-guard gate once warnings are clean" issue.
+        run: lake build
