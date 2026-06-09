@@ -18,9 +18,6 @@ lean_lib LambdaSat where
   plugins := #[axiomGuardPlugin]
 
 lean_lib Tests where
-  globs := #[.submodules `Tests]
-  plugins := #[axiomGuardPlugin]
-
-lean_exe «integration-tests» where
-  root := `Tests.IntegrationTests
+  -- TOML `globs = ["Tests"]` decodes to `Glob.one` (a single module), not submodules.
+  globs := #[.one `Tests]
   plugins := #[axiomGuardPlugin]
