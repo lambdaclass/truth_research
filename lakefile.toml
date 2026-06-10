@@ -13,3 +13,7 @@ name = "LambdaSat"
 [[lean_lib]]
 name = "Tests"
 globs = ["Tests"]
+
+[[lean_exe]]
+name = "integration-tests"
+root = "Tests.IntegrationTests"
