@@ -21,3 +21,7 @@ lean_lib Tests where
   -- TOML `globs = ["Tests"]` decodes to `Glob.one` (a single module), not submodules.
   globs := #[.one `Tests]
   plugins := #[axiomGuardPlugin]
+
+lean_exe «integration-tests» where
+  root := `Tests.IntegrationTests
+  plugins := #[axiomGuardPlugin]
