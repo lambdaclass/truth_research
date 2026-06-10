@@ -67,6 +67,7 @@ def BestCostLowerBound (g : EGraph Op) (costFn : ENode Op → Nat) : Prop :=
 -- Section 2: BestCostLowerBound implies acyclicity
 -- ══════════════════════════════════════════════════════════════════
 
+omit [NodeOps Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- Foldl with non-negative additions is ≥ init. -/
 private theorem foldl_ge_init (g : EGraph Op) (children : List EClassId) (init : Nat) :
     children.foldl (fun sum c => sum + bestCostOf g c) init ≥ init := by
@@ -76,6 +77,7 @@ private theorem foldl_ge_init (g : EGraph Op) (children : List EClassId) (init :
     simp only [List.foldl_cons]
     exact Nat.le_trans (Nat.le_add_right _ _) (ih _)
 
+omit [NodeOps Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- If `childId` is in a list, then the fold sum ≥ bestCostOf childId. -/
 private theorem foldl_sum_ge_mem (g : EGraph Op) (children : List EClassId)
     (childId : EClassId) (hmem : childId ∈ children) :
@@ -94,6 +96,7 @@ private theorem foldl_sum_ge_mem (g : EGraph Op) (children : List EClassId)
     · have := ih hmem_tl (init + bestCostOf g hd) hmem_tl
       omega
 
+omit [LawfulBEq Op] [LawfulHashable Op] in
 /-- **BestCostLowerBound with positive cost function implies acyclic DAG.**
     Uses bestCostOf as the ranking function: if bestCost(parent) ≥ costFn(nd) + Σ children
     and costFn ≥ 1, then bestCost(parent) > bestCost(child). -/
@@ -115,6 +118,7 @@ theorem bestCostLowerBound_acyclic (g : EGraph Op) (costFn : ENode Op → Nat)
 -- Section 3: updateClassBest properties
 -- ══════════════════════════════════════════════════════════════════
 
+omit [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- When updateClassBest returns changed=true, the cost equals
     costFn(nd) + childCosts computed using the accumulator. -/
 private theorem updateClassBest_cost_eq (uf : UnionFind) (costFn : ENode Op → Nat)
@@ -145,6 +149,7 @@ private theorem updateClassBest_cost_eq (uf : UnionFind) (costFn : ENode Op → 
         simp [ENode.children]; rfl
       · exact prev)
 
+omit [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- bestCost can only decrease through updateClassBest. -/
 private theorem updateClassBest_bestCost_le (uf : UnionFind) (costFn : ENode Op → Nat)
     (acc : Std.HashMap EClassId (EClass Op)) (eclass : EClass Op) :
@@ -176,6 +181,7 @@ private def SelfLB (uf : UnionFind) (classes : Std.HashMap EClassId (EClass Op))
 
 -- ── Helpers for closing the processKeys-preserves-SelfLB gap ──
 
+omit [NodeOps Op] [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- HashMap insert: get? at same key returns inserted value. -/
 private theorem get?_insert_self_cls (m : Std.HashMap EClassId (EClass Op))
     (k : EClassId) (v : EClass Op) :
@@ -183,6 +189,7 @@ private theorem get?_insert_self_cls (m : Std.HashMap EClassId (EClass Op))
   simp only [Std.HashMap.get?_eq_getElem?]
   rw [Std.HashMap.getElem?_insert]; simp
 
+omit [NodeOps Op] [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- HashMap insert: get? at different key is unchanged. -/
 private theorem get?_insert_ne_cls (m : Std.HashMap EClassId (EClass Op))
     (k k' : EClassId) (v : EClass Op) (h : k ≠ k') :
@@ -190,6 +197,7 @@ private theorem get?_insert_ne_cls (m : Std.HashMap EClassId (EClass Op))
   simp only [Std.HashMap.get?_eq_getElem?]
   rw [Std.HashMap.getElem?_insert]; simp [beq_iff_eq, h]
 
+omit [NodeOps Op] [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- HashMap toList keys have no duplicates (bridge from keys API). -/
 private theorem keys_nodup_cls
     (m : Std.HashMap EClassId (EClass Op)) : (m.toList.map Prod.fst).Nodup := by
@@ -211,6 +219,7 @@ private theorem foldl_sum_le_pointwise (children : List EClassId) {f g : EClassI
   | cons hd tl ih =>
     simp only [List.foldl_cons]; apply ih; have := hle hd; omega
 
+omit [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- **processKeys preserves SelfLB.** Key invariant: unprocessed keys have
     their original entries in acc. Nodup ensures each key is processed at most
     once, so bestCost at any position can only decrease, maintaining the
@@ -291,6 +300,7 @@ private theorem processKeys_preserves_SelfLB (uf : UnionFind) (costFn : ENode Op
           (fun k hk => horig k (List.mem_cons.mpr (Or.inr hk)))
           (List.nodup_cons.mp hnodup).2
 
+omit [BEq Op] [Hashable Op] [LawfulBEq Op] [LawfulHashable Op] in
 /-- computeCostsLoop preserves the self-referential lower bound.
     Each processKeys pass only decreases costs, so the SelfLB invariant
     is maintained through all iterations. -/
@@ -309,6 +319,7 @@ private theorem computeCostsLoop_selfLB (uf : UnionFind) (costFn : ENode Op → 
     · exact computeCostsLoop_selfLB uf costFn n _ h_pk
     · exact h_pk
 
+omit [LawfulBEq Op] [LawfulHashable Op] in
 /-- **computeCostsF on a fresh graph produces a BestCostLowerBound.**
     A "fresh" graph has bestNode = none for all classes (the default after
     saturateF, since saturation doesn't modify bestNode/bestCost). -/
@@ -324,6 +335,7 @@ theorem computeCostsF_bestCost_lower_bound (g : EGraph Op) (costFn : ENode Op �
   intro cid cls nd hcls hbn
   exact absurd hbn (by simp [h_fresh cid cls hcls])
 
+omit [LawfulBEq Op] [LawfulHashable Op] in
 /-- **computeCostsF with positive cost function produces an acyclic bestNode DAG.**
     Combines BestCostLowerBound (from cost monotonicity) with the acyclicity theorem.
     Hypothesis `h_fresh`: all classes have bestNode = none (true after saturateF). -/
@@ -353,6 +365,7 @@ private theorem mapOption_some_of_forall {f : α → Option β} {l : List α}
     obtain ⟨bs, hbs⟩ := ih'
     exact ⟨b :: bs, by simp [mapOption, hb, hbs]⟩
 
+omit [LawfulBEq Op] [LawfulHashable Op] in
 /-- **Fuel sufficiency**: if the bestNode DAG is acyclic (via rank function),
     every class has bestNode set, and reconstruct always succeeds,
     then extractF returns `some` when fuel > rank(id).
@@ -401,6 +414,7 @@ theorem extractF_of_rank (g : EGraph Op)
       simp only [extractF, hcls, hnd, hbs]
       exact hrecon nd bs
 
+omit [LawfulBEq Op] [LawfulHashable Op] in
 /-- **extractAuto completeness**: if the bestNode DAG is acyclic with rank bounded
     by `numClasses`, all classes have bestNode set, and reconstruct always succeeds,
     then `extractAuto` returns `some`.
